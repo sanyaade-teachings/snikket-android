@@ -1,5 +1,12 @@
 # Changelog
 
+### Version 2.19.6
+
+* Send delivery receipts by default and turn setting into "Read receipts"
+* Introduce setting to always use relays
+* Fix avatar caching issue
+* Fix DNS occasionally not resolving when Private DNS is enabled
+
 ### Version 2.19.5
 
 * Improve error message for servers that do not support TLS 1.3

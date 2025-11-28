@@ -123,7 +123,7 @@
     <string name="pref_advanced_options">Zaawansowane</string>
     <string name="pref_never_send_crash_summary">Wysyłając ślady stosu pomagasz w rozwoju</string>
     <string name="pref_confirm_messages">Potwierdzenia wiadomości</string>
-    <string name="pref_confirm_messages_summary">Zezwól na wysyłanie do osób z twojej listy kontaktów informacji o tym, kiedy otrzymałeś i przeczytałeś wiadomość od nich</string>
+    <string name="pref_confirm_messages_summary">Zezwól na wysyłanie do osób z twojej listy kontaktów informacji o tym, kiedy otrzymałeś i przeczytałeś wiadomość od nich</string>
     <string name="pref_prevent_screenshots">Zapobiegaj zrzutom ekranu</string>
     <string name="pref_prevent_screenshots_summary">Ukryj zawartość aplikacji w podglądzie aplikacji oraz zablokuj zrzuty ekranu </string>
     <string name="pref_ui_options">UI</string>

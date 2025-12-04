@@ -76,7 +76,6 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.MucOptions;
 import eu.siacs.conversations.entities.PresenceTemplate;
 import eu.siacs.conversations.entities.Presences;
-import eu.siacs.conversations.entities.Reaction;
 import eu.siacs.conversations.generator.AbstractGenerator;
 import eu.siacs.conversations.generator.IqGenerator;
 import eu.siacs.conversations.generator.MessageGenerator;
@@ -96,7 +95,6 @@ import eu.siacs.conversations.utils.AccountUtils;
 import eu.siacs.conversations.utils.Compatibility;
 import eu.siacs.conversations.utils.ConversationsFileObserver;
 import eu.siacs.conversations.utils.CryptoHelper;
-import eu.siacs.conversations.utils.Emoticons;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.PhoneHelper;
 import eu.siacs.conversations.utils.QuickLoader;
@@ -3610,80 +3608,6 @@ public class XmppConnectionService extends Service {
         final var connection = account.getXmppConnection();
         updateConversationUi();
         connection.getManager(DisplayedManager.class).displayed(readMessages);
-    }
-
-    public boolean sendReactions(final Message message, final Collection<String> reactions) {
-        if (message.getConversation() instanceof Conversation conversation) {
-            final var isPrivateMessage = message.isPrivateMessage();
-            final Jid reactTo;
-            final boolean typeGroupChat;
-            final String reactToId;
-            final Collection<Reaction> combinedReactions;
-            if (conversation.getMode() == Conversational.MODE_MULTI && !isPrivateMessage) {
-                final var mucOptions = conversation.getMucOptions();
-                if (!mucOptions.participating()) {
-                    Log.e(Config.LOGTAG, "not participating in MUC");
-                    return false;
-                }
-                final var self = mucOptions.getSelf();
-                final String occupantId = self.getOccupantId();
-                if (Strings.isNullOrEmpty(occupantId)) {
-                    Log.e(Config.LOGTAG, "occupant id not found for reaction in MUC");
-                    return false;
-                }
-                final var existingRaw =
-                        ImmutableSet.copyOf(
-                                Collections2.transform(message.getReactions(), r -> r.reaction));
-                final var reactionsAsExistingVariants =
-                        ImmutableSet.copyOf(
-                                Collections2.transform(
-                                        reactions, r -> Emoticons.existingVariant(r, existingRaw)));
-                if (!reactions.equals(reactionsAsExistingVariants)) {
-                    Log.d(Config.LOGTAG, "modified reactions to existing variants");
-                }
-                reactToId = message.getServerMsgId();
-                reactTo = conversation.getAddress().asBareJid();
-                typeGroupChat = true;
-                combinedReactions =
-                        Reaction.withOccupantId(
-                                message.getReactions(),
-                                reactionsAsExistingVariants,
-                                false,
-                                self.getFullJid(),
-                                conversation.getAccount().getJid(),
-                                occupantId);
-            } else {
-                if (message.isCarbon() || message.getStatus() == Message.STATUS_RECEIVED) {
-                    reactToId = message.getRemoteMsgId();
-                } else {
-                    reactToId = message.getUuid();
-                }
-                typeGroupChat = false;
-                if (isPrivateMessage) {
-                    reactTo = message.getCounterpart();
-                } else {
-                    reactTo = conversation.getAddress().asBareJid();
-                }
-                combinedReactions =
-                        Reaction.withFrom(
-                                message.getReactions(),
-                                reactions,
-                                false,
-                                conversation.getAccount().getJid());
-            }
-            if (reactTo == null || Strings.isNullOrEmpty(reactToId)) {
-                Log.e(Config.LOGTAG, "could not find id to react to");
-                return false;
-            }
-            final var reactionMessage =
-                    mMessageGenerator.reaction(reactTo, typeGroupChat, reactToId, reactions);
-            sendMessagePacket(conversation.getAccount(), reactionMessage);
-            message.setReactions(combinedReactions);
-            updateMessage(message, false);
-            return true;
-        } else {
-            return false;
-        }
     }
 
     public MemorizingTrustManager getMemorizingTrustManager() {

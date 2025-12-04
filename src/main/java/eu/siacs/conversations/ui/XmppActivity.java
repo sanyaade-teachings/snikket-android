@@ -89,6 +89,7 @@ import eu.siacs.conversations.xmpp.OnKeyStatusUpdated;
 import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.PresenceManager;
+import eu.siacs.conversations.xmpp.manager.ReactionManager;
 import eu.siacs.conversations.xmpp.manager.RegistrationManager;
 import im.conversations.android.xmpp.model.reactions.Restrictions;
 import java.io.IOException;
@@ -353,6 +354,7 @@ public abstract class XmppActivity extends ActionBarActivity {
     }
 
     public void sendReactions(final Message message, final Collection<String> reactions) {
+        final var account = message.getConversation().getAccount();
         final Restrictions restrictions;
         if (message.getConversation() instanceof Conversation c
                 && c.getMode() == Conversational.MODE_MULTI) {
@@ -371,7 +373,9 @@ public abstract class XmppActivity extends ActionBarActivity {
             Toast.makeText(this, R.string.this_reaction_isnt_allowed, Toast.LENGTH_LONG).show();
             return;
         }
-        if (this.xmppConnectionService.sendReactions(message, reactions)) {
+        if (account.getXmppConnection()
+                .getManager(ReactionManager.class)
+                .sendReactions(message, reactions)) {
             return;
         }
         Toast.makeText(this, R.string.could_not_add_reaction, Toast.LENGTH_LONG).show();

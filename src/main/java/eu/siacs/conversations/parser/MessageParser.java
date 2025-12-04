@@ -15,8 +15,6 @@ import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
-import eu.siacs.conversations.entities.MucOptions;
-import eu.siacs.conversations.entities.Reaction;
 import eu.siacs.conversations.entities.ReadByMarker;
 import eu.siacs.conversations.entities.RtpSessionStatus;
 import eu.siacs.conversations.http.HttpConnectionManager;
@@ -36,6 +34,7 @@ import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.ModerationManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.PubSubManager;
+import eu.siacs.conversations.xmpp.manager.ReactionManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
 import im.conversations.android.xmpp.model.Extension;
 import im.conversations.android.xmpp.model.axolotl.Encrypted;
@@ -909,11 +908,8 @@ public class MessageParser extends AbstractParser
                         conversation,
                         from);
             }
-            final Reactions reactions = packet.getExtension(Reactions.class);
-            if (reactions != null) {
-                final var user = getManager(MultiUserChatManager.class).getMucUser(packet, query);
-                processReactions(
-                        reactions, conversation, isTypeGroupChat, counterpart, user, packet);
+            if (packet.hasExtension(Reactions.class)) {
+                getManager(ReactionManager.class).processReactions(packet, counterpart, query);
             }
 
             if (original.hasExtension(Retract.class)
@@ -1145,113 +1141,6 @@ public class MessageParser extends AbstractParser
             if (displayedMessage != null && selfAddressed) {
                 dismissNotification(account, counterpart, query, id);
             }
-        }
-    }
-
-    private void processReactions(
-            final Reactions reactions,
-            final Conversation conversation,
-            final boolean isTypeGroupChat,
-            final Jid counterpart,
-            final MucOptions.User user,
-            final im.conversations.android.xmpp.model.stanza.Message packet) {
-        final var account = getAccount();
-        final String reactingTo = reactions.getId();
-        if (conversation == null || reactingTo == null) {
-            return;
-        }
-        if (isTypeGroupChat && conversation.getMode() == Conversational.MODE_MULTI) {
-            final var mucOptions =
-                    getManager(MultiUserChatManager.class).getOrCreateState(conversation);
-            final var occupant =
-                    mucOptions.occupantId() ? packet.getOnlyExtension(OccupantId.class) : null;
-            final var occupantId = occupant == null ? null : occupant.getId();
-            if (occupantId != null) {
-                final boolean isReceived = user == null || !mucOptions.isOurAccount(user);
-                final Message message;
-                final var inMemoryMessage = conversation.findMessageWithServerMsgId(reactingTo);
-                if (inMemoryMessage != null) {
-                    message = inMemoryMessage;
-                } else {
-                    message =
-                            mXmppConnectionService.databaseBackend.getMessageWithServerMsgId(
-                                    conversation, reactingTo);
-                }
-                if (message != null) {
-                    final var combinedReactions =
-                            Reaction.withOccupantId(
-                                    message.getReactions(),
-                                    reactions.getReactions(),
-                                    isReceived,
-                                    counterpart,
-                                    user == null ? null : user.getRealJid(),
-                                    occupantId);
-                    message.setReactions(combinedReactions);
-                    mXmppConnectionService.updateMessage(message, false);
-                } else {
-                    Log.d(Config.LOGTAG, "message with id " + reactingTo + " not found");
-                }
-            } else {
-                Log.d(Config.LOGTAG, "received reaction in channel w/o occupant ids. ignoring");
-            }
-        } else {
-            final Message message;
-            final var inMemoryMessage = conversation.findMessageWithUuidOrRemoteId(reactingTo);
-            if (inMemoryMessage != null) {
-                message = inMemoryMessage;
-            } else {
-                message =
-                        mXmppConnectionService.databaseBackend.getMessageWithUuidOrRemoteId(
-                                conversation, reactingTo);
-            }
-            if (message == null) {
-                Log.d(Config.LOGTAG, "message with id " + reactingTo + " not found");
-                return;
-            }
-            final boolean isReceived;
-            final Jid reactionFrom;
-            if (conversation.getMode() == Conversational.MODE_MULTI) {
-                Log.d(Config.LOGTAG, "received reaction as MUC PM. triggering validation");
-                final var mucOptions =
-                        getManager(MultiUserChatManager.class).getOrCreateState(conversation);
-                final var occupant =
-                        mucOptions.occupantId() ? packet.getOnlyExtension(OccupantId.class) : null;
-                final var occupantId = occupant == null ? null : occupant.getId();
-                if (occupantId == null) {
-                    Log.d(
-                            Config.LOGTAG,
-                            "received reaction via PM channel w/o occupant ids. ignoring");
-                    return;
-                }
-                isReceived = user == null || !mucOptions.isOurAccount(user);
-                if (isReceived) {
-                    reactionFrom = counterpart;
-                } else {
-                    if (!occupantId.equals(message.getOccupantId())) {
-                        Log.d(
-                                Config.LOGTAG,
-                                "reaction received via MUC PM did not pass validation");
-                        return;
-                    }
-                    reactionFrom = account.getJid().asBareJid();
-                }
-            } else {
-                if (packet.fromAccount(account)) {
-                    isReceived = false;
-                    reactionFrom = account.getJid().asBareJid();
-                } else {
-                    isReceived = true;
-                    reactionFrom = counterpart;
-                }
-            }
-            final var combinedReactions =
-                    Reaction.withFrom(
-                            message.getReactions(),
-                            reactions.getReactions(),
-                            isReceived,
-                            reactionFrom);
-            message.setReactions(combinedReactions);
-            mXmppConnectionService.updateMessage(message, false);
         }
     }
 

@@ -22,12 +22,9 @@ import im.conversations.android.xmpp.model.jmi.Propose;
 import im.conversations.android.xmpp.model.jmi.Reject;
 import im.conversations.android.xmpp.model.jmi.Retract;
 import im.conversations.android.xmpp.model.markers.Markable;
-import im.conversations.android.xmpp.model.reactions.Reaction;
-import im.conversations.android.xmpp.model.reactions.Reactions;
 import im.conversations.android.xmpp.model.receipts.Request;
 import im.conversations.android.xmpp.model.unique.OriginId;
 import java.text.SimpleDateFormat;
-import java.util.Collection;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -150,27 +147,6 @@ public class MessageGenerator extends AbstractGenerator {
             packet.addChild("encryption", "urn:xmpp:eme:0")
                     .setAttribute("namespace", "jabber:x:encrypted");
         }
-        return packet;
-    }
-
-    public im.conversations.android.xmpp.model.stanza.Message reaction(
-            final Jid to,
-            final boolean groupChat,
-            final String reactingTo,
-            final Collection<String> ourReactions) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(
-                groupChat
-                        ? im.conversations.android.xmpp.model.stanza.Message.Type.GROUPCHAT
-                        : im.conversations.android.xmpp.model.stanza.Message.Type.CHAT);
-        packet.setTo(to);
-        final var reactions = packet.addExtension(new Reactions());
-        reactions.setId(reactingTo);
-        for (final String ourReaction : ourReactions) {
-            reactions.addExtension(new Reaction(ourReaction));
-        }
-        packet.addExtension(new Store());
         return packet;
     }
 

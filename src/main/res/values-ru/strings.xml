@@ -491,7 +491,7 @@
     <string name="device_does_not_support_certificates">Ваше устройство не поддерживает выбор клиентских сертификатов!</string>
     <string name="pref_connection_options">Подключение</string>
     <string name="pref_use_tor">Соединение через Tor</string>
-    <string name="pref_use_tor_summary">Направить все соединения через сеть Tor. Требуется Orbot.</string>
+    <string name="pref_use_tor_summary">Направить все соединения через сеть Tor (требуется Orbot)</string>
     <string name="account_settings_hostname">Имя сервера</string>
     <string name="account_settings_port">Порт</string>
     <string name="hostname_or_onion">Сервер или .onion-адрес</string>
@@ -899,7 +899,7 @@
     <string name="group_chats_and_channels"><![CDATA[Конференции и каналы]]></string>
     <string name="jabber_network">jabber.network</string>
     <string name="local_server">Локальный сервер</string>
-    <string name="pref_channel_discovery_summary">Большинству пользователей следует выбрать \"jabber.network\" для получения наиболее подходящих предложений от всей публичной экосистемы XMPP.</string>
+    <string name="pref_channel_discovery_summary">Большинству пользователей следует выбрать \"jabber.network\" для получения наиболее подходящих предложений от всей публичной экосистемы XMPP</string>
     <string name="pref_channel_discovery">Способ поиска каналов</string>
     <string name="backup">Резервное копирование</string>
     <string name="category_about">О приложении</string>
@@ -1196,7 +1196,7 @@
     <string name="number_reactions_are_restricted">Достигнуто ограничение реакций.</string>
     <string name="this_reaction_isnt_allowed">Это недопустимая реакция.</string>
     <string name="enable_account_to_delete">Аккаунт отключён. Включите его, чтобы удалить с сервера.</string>
-    <string name="pref_use_relays_summary">Перенаправлять все прямые (P2P) соединения (звонки и передачу файлов) через свой сервер, чтобы избежать раскрытия вашего IP-адреса.</string>
+    <string name="pref_use_relays_summary">Перенаправлять все прямые (P2P) соединения (звонки и передачу файлов) через свой сервер, чтобы избежать раскрытия вашего IP-адреса</string>
     <string name="peer_to_peer">Прямые соединения</string>
     <string name="pref_use_relays">Ретранслировать</string>
 </resources>

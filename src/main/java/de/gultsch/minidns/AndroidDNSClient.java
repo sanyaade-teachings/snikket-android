@@ -174,8 +174,13 @@ public class AndroidDNSClient extends AbstractDnsClient {
     }
 
     private List<DNSServer> getDNSServers() {
+        final var c = this.context;
+        if (c == null) {
+            Log.e(Config.LOGTAG, "no DNS servers found. Context not ready");
+            return Collections.emptyList();
+        }
         final ConnectivityManager connectivityManager =
-                context.getSystemService(ConnectivityManager.class);
+                c.getSystemService(ConnectivityManager.class);
         if (connectivityManager == null) {
             Log.w(Config.LOGTAG, "no DNS servers found. ConnectivityManager was null");
             return Collections.emptyList();

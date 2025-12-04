@@ -15,7 +15,6 @@ import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
-import eu.siacs.conversations.entities.ReadByMarker;
 import eu.siacs.conversations.entities.RtpSessionStatus;
 import eu.siacs.conversations.http.HttpConnectionManager;
 import eu.siacs.conversations.services.XmppConnectionService;
@@ -30,6 +29,7 @@ import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
 import eu.siacs.conversations.xmpp.manager.ActivityManager;
 import eu.siacs.conversations.xmpp.manager.ChatStateManager;
 import eu.siacs.conversations.xmpp.manager.DeliveryReceiptManager;
+import eu.siacs.conversations.xmpp.manager.DisplayedManager;
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.ModerationManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
@@ -895,19 +895,11 @@ public class MessageParser extends AbstractParser
                 getManager(DeliveryReceiptManager.class).processReceived(packet, query);
             }
 
-            // TODO move to DisplayedManager
-            final var displayed = packet.getExtension(Displayed.class);
-            if (displayed != null) {
-                processDisplayed(
-                        displayed,
-                        packet,
-                        selfAddressed,
-                        counterpart,
-                        query,
-                        isTypeGroupChat,
-                        conversation,
-                        from);
+            if (packet.hasExtension(Displayed.class)) {
+                getManager(DisplayedManager.class)
+                        .processDisplayed(packet, selfAddressed, counterpart, query);
             }
+
             if (packet.hasExtension(Reactions.class)) {
                 getManager(ReactionManager.class).processReactions(packet, counterpart, query);
             }
@@ -1064,86 +1056,6 @@ public class MessageParser extends AbstractParser
         }
     }
 
-    private void processDisplayed(
-            final Displayed displayed,
-            final im.conversations.android.xmpp.model.stanza.Message packet,
-            final boolean selfAddressed,
-            final Jid counterpart,
-            final MessageArchiveManager.Query query,
-            final boolean isTypeGroupChat,
-            final Conversation conversation,
-            final Jid from) {
-        final var account = getAccount();
-        final var id = displayed.getId();
-        // TODO we don’t even use 'sender' any more. Remove this!
-        final Jid sender = Jid.Invalid.getNullForInvalid(displayed.getAttributeAsJid("sender"));
-        if (packet.fromAccount(account) && !selfAddressed) {
-            final Conversation c = mXmppConnectionService.find(account, counterpart.asBareJid());
-            final Message message =
-                    (c == null || id == null) ? null : c.findReceivedWithRemoteId(id);
-            if (message != null && (query == null || query.isCatchup())) {
-                mXmppConnectionService.markReadUpTo(c, message);
-            }
-            if (query == null) {
-                getManager(ActivityManager.class)
-                        .record(from, ActivityManager.ActivityType.DISPLAYED);
-            }
-        } else if (isTypeGroupChat) {
-            final Message message;
-            if (conversation != null && id != null) {
-                if (sender != null) {
-                    message = conversation.findMessageWithRemoteId(id, sender);
-                } else {
-                    message = conversation.findMessageWithServerMsgId(id);
-                }
-            } else {
-                message = null;
-            }
-            if (message != null) {
-                final var user = getManager(MultiUserChatManager.class).getMucUser(packet, query);
-                if (user != null && user.getMucOptions().isOurAccount(user)) {
-                    if (!message.isRead()
-                            && (query == null || query.isCatchup())) { // checking if message is
-                        // unread fixes race conditions
-                        // with reflections
-                        mXmppConnectionService.markReadUpTo(conversation, message);
-                    }
-                } else if (!counterpart.isBareJid() && user != null && user.getRealJid() != null) {
-                    final ReadByMarker readByMarker = ReadByMarker.from(user);
-                    if (message.addReadByMarker(readByMarker)) {
-                        final var mucOptions =
-                                getManager(MultiUserChatManager.class)
-                                        .getOrCreateState(conversation);
-                        final var everyone = mucOptions.getMembers();
-                        final var readyBy = message.getReadyByTrue();
-                        final var mStatus = message.getStatus();
-                        if (mucOptions.isPrivateAndNonAnonymous()
-                                && (mStatus == Message.STATUS_SEND_RECEIVED
-                                        || mStatus == Message.STATUS_SEND)
-                                && readyBy.containsAll(everyone)) {
-                            message.setStatus(Message.STATUS_SEND_DISPLAYED);
-                        }
-                        mXmppConnectionService.updateMessage(message, false);
-                    }
-                }
-            }
-        } else {
-            final Message displayedMessage =
-                    mXmppConnectionService.markMessage(
-                            account, from.asBareJid(), id, Message.STATUS_SEND_DISPLAYED);
-            Message message = displayedMessage == null ? null : displayedMessage.prev();
-            while (message != null
-                    && message.getStatus() == Message.STATUS_SEND_RECEIVED
-                    && message.getTimeSent() < displayedMessage.getTimeSent()) {
-                mXmppConnectionService.markMessage(message, Message.STATUS_SEND_DISPLAYED);
-                message = message.prev();
-            }
-            if (displayedMessage != null && selfAddressed) {
-                dismissNotification(account, counterpart, query, id);
-            }
-        }
-    }
-
     private static Pair<im.conversations.android.xmpp.model.stanza.Message, Long>
             getForwardedMessagePacket(
                     final im.conversations.android.xmpp.model.stanza.Message original,
@@ -1178,24 +1090,6 @@ public class MessageParser extends AbstractParser
             return new Pair<>(forwardedMessage, timestamp);
         }
         return null;
-    }
-
-    private void dismissNotification(
-            Account account, Jid counterpart, MessageArchiveManager.Query query, final String id) {
-        final Conversation conversation =
-                mXmppConnectionService.find(account, counterpart.asBareJid());
-        if (conversation != null && (query == null || query.isCatchup())) {
-            final String displayableId = conversation.findMostRecentRemoteDisplayableId();
-            if (displayableId != null && displayableId.equals(id)) {
-                mXmppConnectionService.markRead(conversation);
-            } else {
-                Log.w(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": received dismissing display marker that did not match our last"
-                                + " id in that conversation");
-            }
-        }
     }
 
     private class Invite {

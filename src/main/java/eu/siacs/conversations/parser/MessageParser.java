@@ -811,6 +811,7 @@ public class MessageParser extends AbstractParser
                     mXmppConnectionService.getNotificationService().push(message);
                 }
             }
+            this.mXmppConnectionService.updateConversationUi();
         } else if (!packet.hasChild("body")) { // no body
 
             final var conversation = mXmppConnectionService.find(account, counterpart.asBareJid());

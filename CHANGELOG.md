@@ -1,5 +1,9 @@
 # Changelog
 
+### Version 2.19.7
+
+* Fix regression (crash on connection) introduced in previous version
+
 ### Version 2.19.6
 
 * Send delivery receipts by default and turn setting into "Read receipts"

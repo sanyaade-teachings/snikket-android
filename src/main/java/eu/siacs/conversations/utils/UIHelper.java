@@ -471,6 +471,8 @@ public class UIHelper {
             return context.getString(R.string.gpx_track);
         } else if (mime.equals("text/plain")) {
             return context.getString(R.string.plain_text_document);
+        } else if (mime.equals("application/vnd.apple.pkpass")) {
+            return context.getString(R.string.mobile_ticket);
         } else {
             return mime;
         }

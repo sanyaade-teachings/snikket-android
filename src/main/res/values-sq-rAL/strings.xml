@@ -1156,4 +1156,5 @@
     <string name="number_reactions_are_restricted">U mbërrit në kufij reagimesh.</string>
     <string name="this_reaction_isnt_allowed">Ky reagim s’lejohet.</string>
     <string name="enable_account_to_delete">Kjo llogari është çaktivizuar. Që ta fshihni nga shërbyesi, aktivizojeni.</string>
+    <string name="mobile_ticket">Çështje për celular</string>
 </resources>

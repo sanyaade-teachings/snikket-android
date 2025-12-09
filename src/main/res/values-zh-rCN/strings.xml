@@ -1144,4 +1144,5 @@
     <string name="peer_to_peer">P2P（点对点）</string>
     <string name="pref_use_relays">始终使用中继</string>
     <string name="pref_use_relays_summary">通过您的服务器中继所有 P2P 连接（通话和文件传输），以避免泄露您的 IP 地址。</string>
+    <string name="mobile_ticket">移动票证</string>
 </resources>

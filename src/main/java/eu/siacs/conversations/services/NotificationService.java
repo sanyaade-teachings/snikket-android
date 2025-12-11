@@ -2043,14 +2043,14 @@ public class NotificationService {
     }
 
     public void notify(final int id, final Notification notification) {
-        if (ActivityCompat.checkSelfPermission(
-                        mXmppConnectionService, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        final var notificationManager =
-                mXmppConnectionService.getSystemService(NotificationManager.class);
         try {
+            if (ActivityCompat.checkSelfPermission(
+                            mXmppConnectionService, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+            final var notificationManager =
+                    mXmppConnectionService.getSystemService(NotificationManager.class);
             notificationManager.notify(id, notification);
         } catch (final RuntimeException e) {
             Log.d(Config.LOGTAG, "unable to make notification", e);

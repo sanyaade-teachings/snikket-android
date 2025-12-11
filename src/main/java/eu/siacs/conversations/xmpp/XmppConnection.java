@@ -2754,10 +2754,6 @@ public class XmppConnection implements Runnable {
         this.changeStateTerminal(Account.State.CONNECTION_TIMEOUT);
     }
 
-    public Features getStreamFeatures() {
-        return this.features;
-    }
-
     public boolean fromServer(final Stanza stanza) {
         final var account = this.account.getJid();
         final Jid from = stanza.getFrom();
@@ -2992,7 +2988,8 @@ public class XmppConnection implements Runnable {
         }
 
         public boolean rosterVersioning() {
-            return connection.streamFeatures != null && connection.streamFeatures.hasChild("ver");
+            return connection.streamFeatures != null
+                    && connection.streamFeatures.rosterVersioning();
         }
 
         public HttpUrl getServiceOutageStatus() {

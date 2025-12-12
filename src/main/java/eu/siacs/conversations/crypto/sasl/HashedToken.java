@@ -2,26 +2,20 @@ package eu.siacs.conversations.crypto.sasl;
 
 import android.util.Base64;
 import android.util.Log;
-
-import androidx.annotation.NonNull;
-
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.hash.HashFunction;
+import com.google.common.io.BaseEncoding;
 import com.google.common.primitives.Bytes;
-
+import eu.siacs.conversations.Config;
+import eu.siacs.conversations.entities.Account;
+import eu.siacs.conversations.utils.SSLSockets;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-
 import javax.net.ssl.SSLSocket;
-
-import eu.siacs.conversations.Config;
-import eu.siacs.conversations.entities.Account;
-import eu.siacs.conversations.utils.SSLSockets;
 
 public abstract class HashedToken extends SaslMechanism implements ChannelBindingMechanism {
 
@@ -80,7 +74,7 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
             throws AuthenticationException {
         final byte[] responderMessage;
         try {
-            responderMessage = Base64.decode(challenge, Base64.NO_WRAP);
+            responderMessage = BaseEncoding.base64().decode(challenge);
         } catch (final Exception e) {
             throw new AuthenticationException("Unable to decode responder message", e);
         }
@@ -89,6 +83,9 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
         final byte[] cbData = getChannelBindingData(socket);
         final byte[] expectedResponderMessage =
                 hashing.hashBytes(Bytes.concat(RESPONDER, cbData)).asBytes();
+        // TODO handle the 0x00 prefix for success responses
+        // we know the length of the hmac and if the response is exactly one byte longer and is 00
+        // then it's fine
         if (Arrays.equals(responderMessage, expectedResponderMessage)) {
             return null;
         }
@@ -104,19 +101,12 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
         return getTokenMechanism().name();
     }
 
-    public static final class Mechanism {
-        public final String hashFunction;
-        public final ChannelBinding channelBinding;
-
-        public Mechanism(String hashFunction, ChannelBinding channelBinding) {
-            this.hashFunction = hashFunction;
-            this.channelBinding = channelBinding;
-        }
+    public record Mechanism(String hashFunction, ChannelBinding channelBinding) {
 
         public static Mechanism of(final String mechanism) {
             final int first = mechanism.indexOf('-');
             final int last = mechanism.lastIndexOf('-');
-            if (last <= first || mechanism.length() <= last) {
+            if (first == -1 || last == -1 || last < first) {
                 throw new IllegalArgumentException("Not a valid HashedToken name");
             }
             if (mechanism.substring(0, first).equals(PREFIX)) {
@@ -166,15 +156,6 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
                 return new Mechanism(hashFunction, cb);
             }
             return null;
-        }
-
-        @NonNull
-        @Override
-        public String toString() {
-            return MoreObjects.toStringHelper(this)
-                    .add("hashFunction", hashFunction)
-                    .add("channelBinding", channelBinding)
-                    .toString();
         }
 
         public String name() {

@@ -38,10 +38,13 @@ import eu.siacs.conversations.xmpp.manager.ReactionManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
 import im.conversations.android.xmpp.model.Extension;
 import im.conversations.android.xmpp.model.axolotl.Encrypted;
+import im.conversations.android.xmpp.model.axolotl.Payload;
 import im.conversations.android.xmpp.model.carbons.Received;
 import im.conversations.android.xmpp.model.carbons.Sent;
 import im.conversations.android.xmpp.model.conference.DirectInvite;
 import im.conversations.android.xmpp.model.correction.Replace;
+import im.conversations.android.xmpp.model.fallback.Body;
+import im.conversations.android.xmpp.model.fallback.Fallback;
 import im.conversations.android.xmpp.model.forward.Forwarded;
 import im.conversations.android.xmpp.model.jmi.Finish;
 import im.conversations.android.xmpp.model.jmi.JingleMessage;
@@ -434,9 +437,18 @@ public class MessageParser extends AbstractParser
             }
         }
 
-        if ((body != null
+        final boolean bodyIsFallback;
+        if (body != null && packet.hasExtension(Reactions.class)) {
+            final var range = Fallback.get(packet, Reactions.class, Body.class);
+            bodyIsFallback = range.isPresent() && range.get().isEntire(body);
+        } else {
+            bodyIsFallback = false;
+        }
+
+        if (((body != null && !bodyIsFallback)
                         || pgpEncrypted != null
-                        || (axolotlEncrypted != null && axolotlEncrypted.hasChild("payload"))
+                        || (axolotlEncrypted != null
+                                && axolotlEncrypted.hasExtension(Payload.class))
                         || oobUrl != null)
                 && !isMucStatusMessage) {
             final boolean conversationIsProbablyMuc =
@@ -812,7 +824,7 @@ public class MessageParser extends AbstractParser
                 }
             }
             this.mXmppConnectionService.updateConversationUi();
-        } else if (!packet.hasChild("body")) { // no body
+        } else { // no body
 
             final var conversation = mXmppConnectionService.find(account, counterpart.asBareJid());
             if (axolotlEncrypted != null) {

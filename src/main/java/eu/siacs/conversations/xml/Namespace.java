@@ -127,4 +127,5 @@ public final class Namespace {
     public static final String ENTITY_CAPABILITIES_2 = "urn:xmpp:caps";
     public static final String PRIVATE_XML_STORAGE = "jabber:iq:private";
     public static final String SERVICE_OUTAGE_STATUS = "urn:xmpp:sos:0";
+    public static final String FALLBACK_INDICATION = "urn:xmpp:fallback:0";
 }

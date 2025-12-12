@@ -939,7 +939,7 @@ public class XmppConnection implements Runnable {
                 tokenMechanism = null;
             }
             if (tokenMechanism != null && !Strings.isNullOrEmpty(token)) {
-                if (ChannelBinding.priority(tokenMechanism.channelBinding)
+                if (ChannelBinding.priority(tokenMechanism.channelBinding())
                         >= ChannelBindingMechanism.getPriority(currentSaslMechanism)) {
                     this.account.setFastToken(tokenMechanism, token);
                     Log.d(
@@ -2983,6 +2983,7 @@ public class XmppConnection implements Runnable {
             return loginInfo == null ? null : loginInfo.saslMechanism.getMechanism();
         }
 
+        // TODO remove this once AxolotlManager is a proper manager (and calls manager methods)
         public boolean pepPublishOptions() {
             return hasDiscoFeature(account.getJid().asBareJid(), Namespace.PUB_SUB_PUBLISH_OPTIONS);
         }
@@ -3006,6 +3007,7 @@ public class XmppConnection implements Runnable {
             return HttpUrl.parse(address);
         }
 
+        // TODO remove this once 'Transformation' / pre parsing is implemented
         public boolean stanzaIds() {
             return hasDiscoFeature(account.getJid().asBareJid(), Namespace.STANZA_IDS);
         }

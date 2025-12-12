@@ -132,7 +132,6 @@ import eu.siacs.conversations.xmpp.manager.PresenceManager;
 import eu.siacs.conversations.xmpp.manager.RegistrationManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
 import eu.siacs.conversations.xmpp.manager.VCardManager;
-import eu.siacs.conversations.xmpp.pep.Avatar;
 import im.conversations.android.model.Bookmark;
 import im.conversations.android.model.ImmutableBookmark;
 import im.conversations.android.xmpp.model.muc.Affiliation;
@@ -301,10 +300,6 @@ public class XmppConnectionService extends Service {
     private final BroadcastReceiver mInternalRestrictedEventReceiver =
             new RestrictedEventReceiver(List.of(TorServiceUtils.ACTION_STATUS));
     private final BroadcastReceiver mInternalScreenEventReceiver = new InternalEventReceiver();
-
-    private static String generateFetchKey(Account account, final Avatar avatar) {
-        return account.getJid().asBareJid() + "_" + avatar.owner + "_" + avatar.sha1sum;
-    }
 
     public boolean isInLowPingTimeoutMode(Account account) {
         synchronized (mLowPingTimeoutMode) {

@@ -3,7 +3,6 @@ package eu.siacs.conversations.parser;
 import android.util.Log;
 import android.util.Pair;
 import com.google.common.base.Strings;
-import eu.siacs.conversations.AppSettings;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.crypto.axolotl.BrokenSessionException;
@@ -169,37 +168,6 @@ public class MessageParser extends AbstractParser
                     conversation.getAccount().getJid().asBareJid()
                             + ": received OMEMO key transport message");
             service.processReceivingKeyTransportMessage(xmppAxolotlMessage, postpone);
-        }
-        return null;
-    }
-
-    private Invite extractInvite(final im.conversations.android.xmpp.model.stanza.Message message) {
-        final Element mucUser = message.findChild("x", Namespace.MUC_USER);
-        if (mucUser != null) {
-            final Element invite = mucUser.findChild("invite");
-            if (invite != null) {
-                final String password = mucUser.findChildContent("password");
-                final Jid from = Jid.Invalid.getNullForInvalid(invite.getAttributeAsJid("from"));
-                final Jid to = Jid.Invalid.getNullForInvalid(invite.getAttributeAsJid("to"));
-                if (to != null && from == null) {
-                    Log.d(Config.LOGTAG, "do not parse outgoing mediated invite " + message);
-                    return null;
-                }
-                final Jid room = Jid.Invalid.getNullForInvalid(message.getAttributeAsJid("from"));
-                if (room == null) {
-                    return null;
-                }
-                return new Invite(room, password, false, from);
-            }
-        }
-        final var conference = message.getExtension(DirectInvite.class);
-        if (conference != null) {
-            Jid from = Jid.Invalid.getNullForInvalid(message.getAttributeAsJid("from"));
-            Jid room = Jid.Invalid.getNullForInvalid(conference.getAttributeAsJid("jid"));
-            if (room == null) {
-                return null;
-            }
-            return new Invite(room, conference.getAttribute("password"), true, from);
         }
         return null;
     }
@@ -385,12 +353,7 @@ public class MessageParser extends AbstractParser
                             + ") message on regular MAM request. skipping");
             return;
         }
-        boolean isMucStatusMessage =
-                Jid.Invalid.hasValidFrom(packet)
-                        && from.isBareJid()
-                        && mucUserElement != null
-                        && mucUserElement.hasChild("status");
-        boolean selfAddressed;
+        final boolean selfAddressed;
         if (packet.fromAccount(account)) {
             status = Message.STATUS_SEND;
             selfAddressed = to == null || account.getJid().asBareJid().equals(to.asBareJid());
@@ -405,34 +368,21 @@ public class MessageParser extends AbstractParser
             selfAddressed = false;
         }
 
-        final Invite invite = extractInvite(packet);
-        if (invite != null) {
-            if (invite.jid.asBareJid().equals(account.getJid().asBareJid())) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": ignore invite to "
-                                + invite.jid
-                                + " because it matches account");
-            } else if (isTypeGroupChat) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": ignoring invite to "
-                                + invite.jid
-                                + " because it was received as group chat");
-            } else if (invite.direct
-                    && (mucUserElement != null
-                            || invite.inviter == null
-                            || getManager(MultiUserChatManager.class).isMuc(invite.inviter))) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": ignoring direct invite to "
-                                + invite.jid
-                                + " because it was received in MUC");
-            } else {
-                invite.execute(account);
+        if (packet.hasExtension(MucUser.class)
+                && packet.getExtension(MucUser.class)
+                        .hasExtension(im.conversations.android.xmpp.model.muc.user.Invite.class)) {
+            if (getManager(MultiUserChatManager.class).handleMediatedInvite(packet)) {
+                return;
+            }
+        }
+        if (packet.hasExtension(DirectInvite.class)) {
+            if (getManager(MultiUserChatManager.class).handleDirectInvite(packet)) {
+                return;
+            }
+        }
+
+        if (original.hasExtension(MucUser.class)) {
+            if (getManager(MultiUserChatManager.class).handleStatusMessage(original)) {
                 return;
             }
         }
@@ -445,12 +395,10 @@ public class MessageParser extends AbstractParser
             bodyIsFallback = false;
         }
 
-        if (((body != null && !bodyIsFallback)
-                        || pgpEncrypted != null
-                        || (axolotlEncrypted != null
-                                && axolotlEncrypted.hasExtension(Payload.class))
-                        || oobUrl != null)
-                && !isMucStatusMessage) {
+        if ((body != null && !bodyIsFallback)
+                || pgpEncrypted != null
+                || (axolotlEncrypted != null && axolotlEncrypted.hasExtension(Payload.class))
+                || oobUrl != null) {
             final boolean conversationIsProbablyMuc =
                     isTypeGroupChat
                             || mucUserElement != null
@@ -886,10 +834,6 @@ public class MessageParser extends AbstractParser
                 }
             }
 
-            if (original.hasExtension(MucUser.class)) {
-                getManager(MultiUserChatManager.class).handleStatusMessage(original);
-            }
-
             // begin JMI parsing
             if (packet.hasExtension(JingleMessage.class)) {
                 processJingleMessage(
@@ -1103,70 +1047,5 @@ public class MessageParser extends AbstractParser
             return new Pair<>(forwardedMessage, timestamp);
         }
         return null;
-    }
-
-    private class Invite {
-        final Jid jid;
-        final String password;
-        final boolean direct;
-        final Jid inviter;
-
-        Invite(Jid jid, String password, boolean direct, Jid inviter) {
-            this.jid = jid;
-            this.password = password;
-            this.direct = direct;
-            this.inviter = inviter;
-        }
-
-        public boolean execute(final Account account) {
-            if (this.jid == null) {
-                return false;
-            }
-            final Contact contact =
-                    this.inviter != null ? account.getRoster().getContact(this.inviter) : null;
-            if (contact != null && contact.isBlocked()) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": ignore invite from "
-                                + contact.getAddress()
-                                + " because contact is blocked");
-                return false;
-            }
-            final AppSettings appSettings = new AppSettings(mXmppConnectionService);
-            if ((contact != null && contact.showInContactList())
-                    || appSettings.isAcceptInvitesFromStrangers()) {
-                final Conversation conversation =
-                        mXmppConnectionService.findOrCreateConversation(account, jid, true, false);
-                if (conversation.getMucOptions().online()) {
-                    Log.d(
-                            Config.LOGTAG,
-                            account.getJid().asBareJid()
-                                    + ": received invite to "
-                                    + jid
-                                    + " but muc is considered to be online");
-                    getManager(MultiUserChatManager.class).pingAndRejoin(conversation);
-                } else {
-                    conversation.getMucOptions().setPassword(password);
-                    mXmppConnectionService.databaseBackend.updateConversation(conversation);
-                    if (contact != null && contact.showInContactList()) {
-                        getManager(MultiUserChatManager.class).joinFollowingInvite(conversation);
-                    } else {
-                        getManager(MultiUserChatManager.class).join(conversation);
-                    }
-                    mXmppConnectionService.updateConversationUi();
-                }
-                return true;
-            } else {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": ignoring invite from "
-                                + this.inviter
-                                + " because we are not accepting invites from strangers. direct="
-                                + direct);
-                return false;
-            }
-        }
     }
 }

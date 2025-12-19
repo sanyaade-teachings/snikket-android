@@ -58,6 +58,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeoutException;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.io.CipherInputStream;
 import org.bouncycastle.crypto.io.CipherOutputStream;
@@ -218,24 +219,25 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 }
             }
             iq.setTo(id.with);
-            id.account
-                    .getXmppConnection()
-                    .sendIqPacket(
-                            iq,
-                            (response) -> {
-                                if (response.getType() == Iq.Type.RESULT) {
-                                    xmppConnectionService.markMessage(
-                                            message, Message.STATUS_OFFERED);
-                                    return;
-                                }
-                                if (response.getType() == Iq.Type.ERROR) {
-                                    handleIqErrorResponse(response);
-                                    return;
-                                }
-                                if (response.getType() == Iq.Type.TIMEOUT) {
-                                    handleIqTimeoutResponse(response);
-                                }
-                            });
+            final var future = id.account.getXmppConnection().sendIqPacket(iq);
+            Futures.addCallback(
+                    future,
+                    new FutureCallback<>() {
+                        @Override
+                        public void onSuccess(Iq result) {
+                            xmppConnectionService.markMessage(message, Message.STATUS_OFFERED);
+                        }
+
+                        @Override
+                        public void onFailure(@NonNull Throwable t) {
+                            if (t instanceof TimeoutException) {
+                                handleIqTimeoutResponse();
+                            } else {
+                                handleIqErrorResponse(t);
+                            }
+                        }
+                    },
+                    MoreExecutors.directExecutor());
             this.transport.readyToSentAdditionalCandidates();
         }
     }
@@ -531,9 +533,12 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                     isInitiator());
         }
         // for connections we initialize we just don’t use S5B when 'use relays' is enabled
+        // for outgoing connections we would have to reject (and not try) every connection that is
+        // not our own proxy
+        // and if both parties do that it simply wont work
         // for incoming connections we might as well try but stick to our proxy candidate
         if (!useRelays && remoteHasFeature(Namespace.JINGLE_TRANSPORTS_S5B)) {
-            return new SocksByteStreamsTransport(xmppConnection, id, isInitiator(), useTor, true);
+            return new SocksByteStreamsTransport(xmppConnection, id, isInitiator(), useTor, false);
         }
         return setupLastResortTransport();
     }

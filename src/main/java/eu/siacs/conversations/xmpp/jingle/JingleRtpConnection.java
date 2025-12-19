@@ -46,6 +46,7 @@ import eu.siacs.conversations.xmpp.jingle.stanzas.RtpDescription;
 import eu.siacs.conversations.xmpp.manager.ExternalServiceDiscoveryManager;
 import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.JingleMessageManager;
+import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.jingle.Jingle;
@@ -69,6 +70,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
 import org.webrtc.PeerConnection;
@@ -769,29 +771,33 @@ public class JingleRtpConnection extends AbstractJingleConnection
                                 .toStub()
                                 .toJinglePacket(Jingle.Action.CONTENT_MODIFY, id.sessionId);
                 proposedContentModification.setTo(id.with);
-                id.account
-                        .getXmppConnection()
-                        .sendIqPacket(
-                                proposedContentModification,
-                                (response) -> {
-                                    if (response.getType() == Iq.Type.RESULT) {
-                                        Log.d(
-                                                Config.LOGTAG,
-                                                id.account.getJid().asBareJid()
-                                                        + ": remote has accepted our upgrade to"
-                                                        + " senders=both");
-                                        acceptContentAdd(
-                                                ContentAddition.summary(modifiedSenders),
-                                                modifiedSenders);
-                                    } else {
-                                        Log.d(
-                                                Config.LOGTAG,
-                                                id.account.getJid().asBareJid()
-                                                        + ": remote has rejected our upgrade to"
-                                                        + " senders=both");
-                                        acceptContentAdd(contentAddition, incomingContentAdd);
-                                    }
-                                });
+                final var future =
+                        id.account.getXmppConnection().sendIqPacket(proposedContentModification);
+                Futures.addCallback(
+                        future,
+                        new FutureCallback<Iq>() {
+                            @Override
+                            public void onSuccess(Iq result) {
+                                Log.d(
+                                        Config.LOGTAG,
+                                        id.account.getJid().asBareJid()
+                                                + ": remote has accepted our upgrade to"
+                                                + " senders=both");
+                                acceptContentAdd(
+                                        ContentAddition.summary(modifiedSenders), modifiedSenders);
+                            }
+
+                            @Override
+                            public void onFailure(@NonNull Throwable t) {
+                                Log.d(
+                                        Config.LOGTAG,
+                                        id.account.getJid().asBareJid()
+                                                + ": remote has rejected our upgrade to"
+                                                + " senders=both");
+                                acceptContentAdd(contentAddition, incomingContentAdd);
+                            }
+                        },
+                        MoreExecutors.directExecutor());
             } else {
                 acceptContentAdd(contentAddition, incomingContentAdd);
             }
@@ -2561,31 +2567,32 @@ public class JingleRtpConnection extends AbstractJingleConnection
         final Iq iq = transportInfo.toJinglePacket(Jingle.Action.TRANSPORT_INFO, id.sessionId);
         Log.d(Config.LOGTAG, "initiating ice restart: " + iq);
         iq.setTo(id.with);
-        this.id
-                .account
-                .getXmppConnection()
-                .sendIqPacket(
-                        iq,
-                        (response) -> {
-                            if (response.getType() == Iq.Type.RESULT) {
-                                Log.d(Config.LOGTAG, "received success to our ice restart");
-                                setLocalContentMap(rtpContentMap);
-                                webRTCWrapper.setIsReadyToReceiveIceCandidates(true);
+        final var future = this.id.account.getXmppConnection().sendIqPacket(iq);
+        Futures.addCallback(
+                future,
+                new FutureCallback<Iq>() {
+                    @Override
+                    public void onSuccess(Iq result) {
+                        Log.d(Config.LOGTAG, "received success to our ice restart");
+                        setLocalContentMap(rtpContentMap);
+                        webRTCWrapper.setIsReadyToReceiveIceCandidates(true);
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull Throwable t) {
+                        if (t instanceof TimeoutException) {
+                            handleIqTimeoutResponse();
+                            return;
+                        } else if (t instanceof IqErrorException iqErrorException) {
+                            if (isTieBreak(iqErrorException.getResponse())) {
+                                Log.d(Config.LOGTAG, "received tie-break as result of ice restart");
                                 return;
                             }
-                            if (response.getType() == Iq.Type.ERROR) {
-                                if (isTieBreak(response)) {
-                                    Log.d(
-                                            Config.LOGTAG,
-                                            "received tie-break as result of ice restart");
-                                    return;
-                                }
-                                handleIqErrorResponse(response);
-                            }
-                            if (response.getType() == Iq.Type.TIMEOUT) {
-                                handleIqTimeoutResponse(response);
-                            }
-                        });
+                        }
+                        handleIqErrorResponse(t);
+                    }
+                },
+                MoreExecutors.directExecutor());
     }
 
     private boolean isTieBreak(final Iq response) {
@@ -2618,33 +2625,36 @@ public class JingleRtpConnection extends AbstractJingleConnection
     private void sendContentAdd(final RtpContentMap contentAdd) {
         final Iq iq = contentAdd.toJinglePacket(Jingle.Action.CONTENT_ADD, id.sessionId);
         iq.setTo(id.with);
-        this.id
-                .account
-                .getXmppConnection()
-                .sendIqPacket(
-                        iq,
-                        (response) -> {
-                            if (response.getType() == Iq.Type.RESULT) {
+        final var future = this.id.account.getXmppConnection().sendIqPacket(iq);
+        Futures.addCallback(
+                future,
+                new FutureCallback<Iq>() {
+                    @Override
+                    public void onSuccess(Iq result) {
+                        Log.d(
+                                Config.LOGTAG,
+                                id.getAccount().getJid().asBareJid()
+                                        + ": received ACK to our content-add");
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull Throwable t) {
+                        if (t instanceof TimeoutException) {
+                            handleIqTimeoutResponse();
+                            return;
+                        } else if (t instanceof IqErrorException iqErrorException) {
+                            if (isTieBreak(iqErrorException.getResponse())) {
+                                JingleRtpConnection.this.outgoingContentAdd = null;
                                 Log.d(
                                         Config.LOGTAG,
-                                        id.getAccount().getJid().asBareJid()
-                                                + ": received ACK to our content-add");
+                                        "received tie-break as result of our content-add");
                                 return;
                             }
-                            if (response.getType() == Iq.Type.ERROR) {
-                                if (isTieBreak(response)) {
-                                    this.outgoingContentAdd = null;
-                                    Log.d(
-                                            Config.LOGTAG,
-                                            "received tie-break as result of our content-add");
-                                    return;
-                                }
-                                handleIqErrorResponse(response);
-                            }
-                            if (response.getType() == Iq.Type.TIMEOUT) {
-                                handleIqTimeoutResponse(response);
-                            }
-                        });
+                        }
+                        handleIqErrorResponse(t);
+                    }
+                },
+                MoreExecutors.directExecutor());
     }
 
     private void setLocalContentMap(final RtpContentMap rtpContentMap) {

@@ -7,6 +7,9 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.MoreExecutors;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Contact;
@@ -17,6 +20,7 @@ import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.manager.DiscoManager;
 import eu.siacs.conversations.xmpp.manager.JingleManager;
+import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.jingle.Jingle;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
@@ -25,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 public abstract class AbstractJingleConnection {
@@ -243,7 +248,24 @@ public abstract class AbstractJingleConnection {
 
     protected void send(final Iq jinglePacket) {
         jinglePacket.setTo(id.with);
-        this.id.account.getXmppConnection().sendIqPacket(jinglePacket, this::handleIqResponse);
+        final var future = this.id.account.getXmppConnection().sendIqPacket(jinglePacket);
+        Futures.addCallback(
+                future,
+                new FutureCallback<>() {
+                    @Override
+                    public void onSuccess(Iq result) {}
+
+                    @Override
+                    public void onFailure(@NonNull Throwable t) {
+                        Log.d(Config.LOGTAG, "failure was a response to " + jinglePacket);
+                        if (t instanceof TimeoutException) {
+                            handleIqTimeoutResponse();
+                        } else {
+                            handleIqErrorResponse(t);
+                        }
+                    }
+                },
+                MoreExecutors.directExecutor());
     }
 
     protected void respondOk(final Iq jinglePacket) {
@@ -256,42 +278,38 @@ public abstract class AbstractJingleConnection {
         this.id.account.getXmppConnection().sendErrorFor(request, condition, jingleCondition);
     }
 
-    private synchronized void handleIqResponse(final Iq response) {
-        if (response.getType() == Iq.Type.ERROR) {
-            handleIqErrorResponse(response);
-            return;
-        }
-        if (response.getType() == Iq.Type.TIMEOUT) {
-            handleIqTimeoutResponse(response);
-        }
-    }
-
-    protected void handleIqErrorResponse(final Iq response) {
-        Preconditions.checkArgument(response.getType() == Iq.Type.ERROR);
-        final String errorCondition = response.getErrorCondition();
-        Log.d(
-                Config.LOGTAG,
-                id.account.getJid().asBareJid()
-                        + ": received IQ-error from "
-                        + response.getFrom()
-                        + " in RTP session. "
-                        + errorCondition);
+    protected void handleIqErrorResponse(final Throwable throwable) {
         if (isTerminated()) {
             Log.i(
                     Config.LOGTAG,
                     id.account.getJid().asBareJid()
-                            + ": ignoring error because session was already terminated");
+                            + ": ignoring error because session was already terminated",
+                    throwable);
             return;
         }
         this.terminateTransport();
         final State target;
-        if (Arrays.asList(
-                        "service-unavailable",
-                        "recipient-unavailable",
-                        "remote-server-not-found",
-                        "remote-server-timeout")
-                .contains(errorCondition)) {
-            target = State.TERMINATED_CONNECTIVITY_ERROR;
+        if (throwable instanceof IqErrorException iqErrorException) {
+            final var response = iqErrorException.getResponse();
+            final var condition = iqErrorException.getErrorCondition();
+            Log.d(
+                    Config.LOGTAG,
+                    id.account.getJid().asBareJid()
+                            + ": received IQ-error from "
+                            + response.getFrom()
+                            + " in jingle session. ",
+                    throwable);
+            if (condition != null
+                    && Arrays.asList(
+                                    Condition.ServiceUnavailable.class,
+                                    Condition.RecipientUnavailable.class,
+                                    Condition.RemoteServerNotFound.class,
+                                    Condition.RemoteServerTimeout.class)
+                            .contains(condition.getClass())) {
+                target = State.TERMINATED_CONNECTIVITY_ERROR;
+            } else {
+                target = State.TERMINATED_APPLICATION_FAILURE;
+            }
         } else {
             target = State.TERMINATED_APPLICATION_FAILURE;
         }
@@ -299,8 +317,7 @@ public abstract class AbstractJingleConnection {
         this.finish();
     }
 
-    protected void handleIqTimeoutResponse(final Iq response) {
-        Preconditions.checkArgument(response.getType() == Iq.Type.TIMEOUT);
+    protected void handleIqTimeoutResponse() {
         Log.d(
                 Config.LOGTAG,
                 id.account.getJid().asBareJid()

@@ -1,23 +1,22 @@
 package eu.siacs.conversations.xmpp.jingle.transports;
 
 import android.util.Log;
-
+import androidx.annotation.NonNull;
 import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.Closeables;
 import com.google.common.primitives.Ints;
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-
+import com.google.common.util.concurrent.MoreExecutors;
 import eu.siacs.conversations.Config;
-import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.jingle.stanzas.IbbTransportInfo;
 import im.conversations.android.xmpp.model.stanza.Iq;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -103,17 +102,23 @@ public class InbandBytestreamsTransport implements Transport {
         open.setAttribute("sid", this.streamId);
         Log.d(Config.LOGTAG, "sending ibb open");
         Log.d(Config.LOGTAG, iqPacket.toString());
-        xmppConnection.sendIqPacket(iqPacket, this::receiveResponseToOpen);
-    }
+        final var future = xmppConnection.sendIqPacket(iqPacket);
+        Futures.addCallback(
+                future,
+                new FutureCallback<Iq>() {
+                    @Override
+                    public void onSuccess(Iq result) {
+                        Log.d(Config.LOGTAG, "ibb open was accepted");
+                        InbandBytestreamsTransport.this.transportCallback.onTransportEstablished();
+                        InbandBytestreamsTransport.this.blockSenderThread.start();
+                    }
 
-    private void receiveResponseToOpen(final Iq response) {
-        if (response.getType() == Iq.Type.RESULT) {
-            Log.d(Config.LOGTAG, "ibb open was accepted");
-            this.transportCallback.onTransportEstablished();
-            this.blockSenderThread.start();
-        } else {
-            this.transportCallback.onTransportSetupFailed();
-        }
+                    @Override
+                    public void onFailure(@NonNull Throwable t) {
+                        InbandBytestreamsTransport.this.transportCallback.onTransportSetupFailed();
+                    }
+                },
+                MoreExecutors.directExecutor());
     }
 
     public boolean deliverPacket(
@@ -290,17 +295,26 @@ public class InbandBytestreamsTransport implements Transport {
             data.setAttribute("sid", this.streamId);
             data.setAttribute("seq", sequence);
             data.setContent(BaseEncoding.base64().encode(block));
-            this.xmppConnection.sendIqPacket(
-                    iqPacket,
-                    (response) -> {
-                        if (response.getType() != Iq.Type.RESULT) {
+            final var future = this.xmppConnection.sendIqPacket(iqPacket);
+            Futures.addCallback(
+                    future,
+                    new FutureCallback<Iq>() {
+                        @Override
+                        public void onSuccess(final Iq result) {
+                            semaphore.release();
+                        }
+
+                        @Override
+                        public void onFailure(@NonNull Throwable t) {
                             Log.d(
                                     Config.LOGTAG,
-                                    "received iq error in response to data block #" + sequence);
+                                    "received iq error in response to data block #" + sequence,
+                                    t);
                             isSending.set(false);
+                            semaphore.release();
                         }
-                        semaphore.release();
-                    });
+                    },
+                    MoreExecutors.directExecutor());
         }
 
         @Override

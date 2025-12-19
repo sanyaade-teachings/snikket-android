@@ -114,7 +114,7 @@ import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.forms.Data;
 import eu.siacs.conversations.xmpp.jingle.AbstractJingleConnection;
-import eu.siacs.conversations.xmpp.jingle.JingleConnectionManager;
+import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
 import eu.siacs.conversations.xmpp.jingle.Media;
 import eu.siacs.conversations.xmpp.jingle.RtpEndUserState;
 import eu.siacs.conversations.xmpp.mam.MamReference;
@@ -124,6 +124,7 @@ import eu.siacs.conversations.xmpp.manager.BlockingManager;
 import eu.siacs.conversations.xmpp.manager.BookmarkManager;
 import eu.siacs.conversations.xmpp.manager.ChatStateManager;
 import eu.siacs.conversations.xmpp.manager.DisplayedManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.NickManager;
@@ -248,8 +249,6 @@ public class XmppConnectionService extends Service {
                 }
             };
     private List<Account> accounts;
-    private final JingleConnectionManager mJingleConnectionManager =
-            new JingleConnectionManager(this);
     private final HttpConnectionManager mHttpConnectionManager = new HttpConnectionManager(this);
     private final AvatarService mAvatarService = new AvatarService(this);
     private final QuickConversationsService mQuickConversationsService =
@@ -528,15 +527,11 @@ public class XmppConnectionService extends Service {
                 break;
             case ACTION_DISMISS_CALL:
                 {
-                    if (intent == null) {
-                        break;
-                    }
                     final String sessionId =
-                            intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
-                    Log.d(
-                            Config.LOGTAG,
-                            "received intent to dismiss call with session id " + sessionId);
-                    mJingleConnectionManager.rejectRtpSession(sessionId);
+                            intent == null
+                                    ? null
+                                    : intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
+                    rejectRtpSession(sessionId);
                     break;
                 }
             case TorServiceUtils.ACTION_STATUS:
@@ -550,15 +545,11 @@ public class XmppConnectionService extends Service {
                 break;
             case ACTION_END_CALL:
                 {
-                    if (intent == null) {
-                        break;
-                    }
                     final String sessionId =
-                            intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
-                    Log.d(
-                            Config.LOGTAG,
-                            "received intent to end call with session id " + sessionId);
-                    mJingleConnectionManager.endRtpSession(sessionId);
+                            intent == null
+                                    ? null
+                                    : intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
+                    endRtpSession(sessionId);
                 }
                 break;
             case ACTION_PROVISION_ACCOUNT:
@@ -729,6 +720,33 @@ public class XmppConnectionService extends Service {
         return START_STICKY;
     }
 
+    private void rejectRtpSession(final String sessionId) {
+        Log.d(Config.LOGTAG, "received intent to dismiss call with session id " + sessionId);
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            jingleManager.rejectRtpSession(sessionId);
+        }
+    }
+
+    public JingleRtpConnection getOngoingRtpConnection() {
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            final var ongoing = jingleManager.getOngoingRtpConnection();
+            if (ongoing != null) {
+                return ongoing;
+            }
+        }
+        return null;
+    }
+
+    private void endRtpSession(final String sessionId) {
+        Log.d(Config.LOGTAG, "received intent to end call with session id " + sessionId);
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            jingleManager.endRtpSession(sessionId);
+        }
+    }
+
     private void quickLog(final String message) {
         if (Strings.isNullOrEmpty(message)) {
             return;
@@ -884,7 +902,9 @@ public class XmppConnectionService extends Service {
             } else {
                 final boolean aggressive =
                         account.getStatus() == Account.State.SEE_OTHER_HOST
-                                || hasJingleRtpConnection(account);
+                                || connection
+                                        .getManager(JingleManager.class)
+                                        .hasJingleRtpConnection();
                 if (connection.getTimeToNextAttempt(aggressive) <= 0) {
                     reconnectAccount(account, true, interactive);
                 }
@@ -1513,7 +1533,9 @@ public class XmppConnectionService extends Service {
                 && !forceP2P) {
             mHttpConnectionManager.createNewUploadConnection(message, delay);
         } else {
-            mJingleConnectionManager.startJingleFileTransfer(message);
+            account.getXmppConnection()
+                    .getManager(JingleManager.class)
+                    .startJingleFileTransfer(message);
         }
     }
 
@@ -3721,14 +3743,6 @@ public class XmppConnectionService extends Service {
 
     public IqGenerator getIqGenerator() {
         return this.mIqGenerator;
-    }
-
-    public JingleConnectionManager getJingleConnectionManager() {
-        return this.mJingleConnectionManager;
-    }
-
-    public boolean hasJingleRtpConnection(final Account account) {
-        return this.mJingleConnectionManager.hasJingleRtpConnection(account);
     }
 
     public QuickConversationsService getQuickConversationsService() {

@@ -2488,12 +2488,15 @@ public class XmppConnection implements Runnable {
     }
 
     public void sendErrorFor(
-            final Iq request,
+            final Stanza request,
             final Condition condition,
             final im.conversations.android.xmpp.model.error.Error.Extension... extensions) {
         final var from = request.getFrom();
         final var id = request.getId();
-        final var response = new Iq(Iq.Type.ERROR);
+        if (id == null) {
+            return;
+        }
+        final var response = errorResponse(request);
         response.setTo(from);
         response.setId(id);
         final var errorTypeCode = Condition.ERROR_CONDITION_MAPPING.get(condition.getClass());
@@ -2506,6 +2509,19 @@ public class XmppConnection implements Runnable {
         error.setCondition(condition);
         error.addExtensions(extensions);
         this.sendPacket(response);
+    }
+
+    private static Stanza errorResponse(final Stanza request) {
+        return switch (request) {
+            case Iq ignored -> new Iq(Iq.Type.ERROR);
+            case im.conversations.android.xmpp.model.stanza.Message ignored ->
+                    new im.conversations.android.xmpp.model.stanza.Message(
+                            im.conversations.android.xmpp.model.stanza.Message.Type.ERROR);
+            case Presence ignored -> new Presence(Presence.Type.ERROR);
+            default ->
+                    throw new IllegalArgumentException(
+                            "Can not create error for " + request.getClass().getSimpleName());
+        };
     }
 
     public void sendMessagePacket(final im.conversations.android.xmpp.model.stanza.Message packet) {
@@ -3005,11 +3021,6 @@ public class XmppConnection implements Runnable {
                 return null;
             }
             return HttpUrl.parse(address);
-        }
-
-        // TODO remove this once 'Transformation' / pre parsing is implemented
-        public boolean stanzaIds() {
-            return hasDiscoFeature(account.getJid().asBareJid(), Namespace.STANZA_IDS);
         }
     }
 }

@@ -15,6 +15,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.services.XmppConnectionService;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -610,7 +611,7 @@ public class WebRTCWrapper {
                         iceGatheringComplete,
                         2,
                         TimeUnit.SECONDS,
-                        JingleConnectionManager.SCHEDULED_EXECUTOR_SERVICE),
+                        JingleManager.SCHEDULED_EXECUTOR_SERVICE),
                 TimeoutException.class,
                 ex -> {
                     Log.d(

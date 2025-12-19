@@ -12,10 +12,14 @@ import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
+import eu.siacs.conversations.utils.CryptoHelper;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.manager.DiscoManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
+import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import java.util.Arrays;
 import java.util.Collection;
@@ -112,7 +116,6 @@ public abstract class AbstractJingleConnection {
         VALID_TRANSITIONS = transitionBuilder.build();
     }
 
-    final JingleConnectionManager jingleConnectionManager;
     protected final XmppConnectionService xmppConnectionService;
     protected final Id id;
     private final Jid initiator;
@@ -120,11 +123,8 @@ public abstract class AbstractJingleConnection {
     protected State state = State.NULL;
 
     AbstractJingleConnection(
-            final JingleConnectionManager jingleConnectionManager,
-            final Id id,
-            final Jid initiator) {
-        this.jingleConnectionManager = jingleConnectionManager;
-        this.xmppConnectionService = jingleConnectionManager.getXmppConnectionService();
+            final XmppConnectionService service, final Id id, final Jid initiator) {
+        this.xmppConnectionService = service;
         this.id = id;
         this.initiator = initiator;
     }
@@ -167,18 +167,18 @@ public abstract class AbstractJingleConnection {
         }
     }
 
-    protected void transitionOrThrow(final State target) {
+    public void transitionOrThrow(final State target) {
         if (!transition(target)) {
             throw new IllegalStateException(
                     String.format("Unable to transition from %s to %s", this.state, target));
         }
     }
 
-    boolean isTerminated() {
+    public boolean isTerminated() {
         return TERMINATED.contains(this.state);
     }
 
-    abstract void deliverPacket(Iq jinglePacket);
+    public abstract void deliverPacket(Iq jinglePacket);
 
     protected void receiveOutOfOrderAction(final Iq jinglePacket, final Jingle.Action action) {
         Log.d(
@@ -193,7 +193,7 @@ public abstract class AbstractJingleConnection {
                             "%s: got a reason to terminate with out-of-order. but already in state"
                                     + " %s",
                             id.account.getJid().asBareJid(), getState()));
-            respondWithOutOfOrder(jinglePacket);
+            this.sendErrorFor(jinglePacket, new JingleCondition.OutOfOrder());
         } else {
             terminateWithOutOfOrder(jinglePacket);
         }
@@ -205,13 +205,17 @@ public abstract class AbstractJingleConnection {
                 id.account.getJid().asBareJid() + ": terminating session with out-of-order");
         terminateTransport();
         transitionOrThrow(State.TERMINATED_APPLICATION_FAILURE);
-        respondWithOutOfOrder(jinglePacket);
+        this.sendErrorFor(jinglePacket, new JingleCondition.OutOfOrder());
         this.finish();
     }
 
     protected void finish() {
         if (isTerminated()) {
-            this.jingleConnectionManager.finishConnectionOrThrow(this);
+            this.id
+                    .account
+                    .getXmppConnection()
+                    .getManager(JingleManager.class)
+                    .finishConnectionOrThrow(this);
         } else {
             throw new AssertionError(String.format("Unable to call finish from %s", this.state));
         }
@@ -219,7 +223,7 @@ public abstract class AbstractJingleConnection {
 
     protected abstract void terminateTransport();
 
-    abstract void notifyRebound();
+    public abstract void notifyRebound();
 
     protected void sendSessionTerminate(
             final Reason reason, final String text, final Consumer<State> trigger) {
@@ -239,30 +243,17 @@ public abstract class AbstractJingleConnection {
 
     protected void send(final Iq jinglePacket) {
         jinglePacket.setTo(id.with);
-        xmppConnectionService.sendIqPacket(id.account, jinglePacket, this::handleIqResponse);
+        this.id.account.getXmppConnection().sendIqPacket(jinglePacket, this::handleIqResponse);
     }
 
     protected void respondOk(final Iq jinglePacket) {
-        xmppConnectionService.sendIqPacket(
-                id.account, jinglePacket.generateResponse(Iq.Type.RESULT), null);
+        this.id.account.getXmppConnection().sendResultFor(jinglePacket);
     }
 
-    protected void respondWithTieBreak(final Iq jinglePacket) {
-        respondWithJingleError(jinglePacket, "tie-break", "conflict", "cancel");
-    }
-
-    protected void respondWithOutOfOrder(final Iq jinglePacket) {
-        respondWithJingleError(jinglePacket, "out-of-order", "unexpected-request", "wait");
-    }
-
-    protected void respondWithItemNotFound(final Iq jinglePacket) {
-        respondWithJingleError(jinglePacket, null, "item-not-found", "cancel");
-    }
-
-    private void respondWithJingleError(
-            final Iq original, String jingleCondition, String condition, String conditionType) {
-        jingleConnectionManager.respondWithJingleError(
-                id.account, original, jingleCondition, condition, conditionType);
+    protected void sendErrorFor(final Iq request, final JingleCondition jingleCondition) {
+        final var condition =
+                Condition.asInstance(JingleCondition.getErrorCondition(jingleCondition));
+        this.id.account.getXmppConnection().sendErrorFor(request, condition, jingleCondition);
     }
 
     private synchronized void handleIqResponse(final Iq response) {
@@ -363,7 +354,7 @@ public abstract class AbstractJingleConnection {
         }
 
         public static Id of(final Account account, final Jid with) {
-            return new Id(account, with, JingleConnectionManager.nextRandomId());
+            return new Id(account, with, CryptoHelper.random(16));
         }
 
         public static Id of(final Message message) {

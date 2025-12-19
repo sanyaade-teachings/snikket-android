@@ -22,6 +22,9 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.Transferable;
 import eu.siacs.conversations.entities.TransferablePlaceholder;
 import eu.siacs.conversations.services.AbstractConnectionManager;
+import eu.siacs.conversations.services.DebouncedInterfaceUpdater;
+import eu.siacs.conversations.services.XmppConnectionService;
+import eu.siacs.conversations.utils.Compatibility;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.XmppConnection;
@@ -80,9 +83,9 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
     private boolean acceptedAutomatically = false;
 
     public JingleFileTransferConnection(
-            final JingleConnectionManager jingleConnectionManager, final Message message) {
+            final XmppConnectionService service, final Message message) {
         super(
-                jingleConnectionManager,
+                service,
                 AbstractJingleConnection.Id.of(message),
                 message.getConversation().getAccount().getJid());
         Preconditions.checkArgument(
@@ -94,10 +97,8 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
     }
 
     public JingleFileTransferConnection(
-            final JingleConnectionManager jingleConnectionManager,
-            final Id id,
-            final Jid initiator) {
-        super(jingleConnectionManager, id, initiator);
+            final XmppConnectionService service, final Id id, final Jid initiator) {
+        super(service, id, initiator);
         final Conversation conversation =
                 this.xmppConnectionService.findOrCreateConversation(
                         id.account, id.with.asBareJid(), false, false);
@@ -109,7 +110,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
     }
 
     @Override
-    void deliverPacket(final Iq iq) {
+    public void deliverPacket(final Iq iq) {
         final var jingle = iq.getExtension(Jingle.class);
         switch (jingle.getAction()) {
             case SESSION_ACCEPT -> receiveSessionAccept(iq, jingle);
@@ -217,22 +218,24 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 }
             }
             iq.setTo(id.with);
-            xmppConnectionService.sendIqPacket(
-                    id.account,
-                    iq,
-                    (response) -> {
-                        if (response.getType() == Iq.Type.RESULT) {
-                            xmppConnectionService.markMessage(message, Message.STATUS_OFFERED);
-                            return;
-                        }
-                        if (response.getType() == Iq.Type.ERROR) {
-                            handleIqErrorResponse(response);
-                            return;
-                        }
-                        if (response.getType() == Iq.Type.TIMEOUT) {
-                            handleIqTimeoutResponse(response);
-                        }
-                    });
+            id.account
+                    .getXmppConnection()
+                    .sendIqPacket(
+                            iq,
+                            (response) -> {
+                                if (response.getType() == Iq.Type.RESULT) {
+                                    xmppConnectionService.markMessage(
+                                            message, Message.STATUS_OFFERED);
+                                    return;
+                                }
+                                if (response.getType() == Iq.Type.ERROR) {
+                                    handleIqErrorResponse(response);
+                                    return;
+                                }
+                                if (response.getType() == Iq.Type.TIMEOUT) {
+                                    handleIqTimeoutResponse(response);
+                                }
+                            });
             this.transport.readyToSentAdditionalCandidates();
         }
     }
@@ -374,10 +377,13 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             final var conversation = (Conversation) message.getConversation();
             conversation.add(message);
 
+            final var autoAcceptFileSize =
+                    new AppSettings(xmppConnectionService).getAutoAcceptFileSize();
             // make auto accept decision
             if (id.account.getRoster().getContact(id.with).showInContactList()
-                    && jingleConnectionManager.hasStoragePermission()
-                    && file.size <= this.jingleConnectionManager.getAutoAcceptFileSize()
+                    && Compatibility.hasStoragePermission(xmppConnectionService)
+                    && autoAcceptFileSize.isPresent()
+                    && file.size <= autoAcceptFileSize.get()
                     && xmppConnectionService.isDataSaverDisabled()) {
                 Log.d(Config.LOGTAG, "auto accepting file from " + id.with);
                 this.acceptedAutomatically = true;
@@ -388,7 +394,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                         "not auto accepting new file offer with size: "
                                 + file.size
                                 + " allowed size:"
-                                + this.jingleConnectionManager.getAutoAcceptFileSize());
+                                + autoAcceptFileSize);
                 message.markUnread();
                 this.xmppConnectionService.updateConversationUi();
                 this.xmppConnectionService.getNotificationService().push(message);
@@ -866,7 +872,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
     }
 
     @Override
-    void notifyRebound() {}
+    public void notifyRebound() {}
 
     @Override
     public void onTransportEstablished() {
@@ -971,7 +977,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
         }
         final var fileDescription = getLocalContentMap().requireOnlyFile();
         final File file = xmppConnectionService.getFileBackend().getFile(message);
-        final Runnable updateRunnable = () -> jingleConnectionManager.updateConversationUi(false);
+        final Runnable updateRunnable = new DebouncedInterfaceUpdater(xmppConnectionService);
         if (receiving) {
             return new FileReceiver(
                     file,

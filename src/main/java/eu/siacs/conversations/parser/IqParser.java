@@ -14,6 +14,7 @@ import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.manager.BlockingManager;
 import eu.siacs.conversations.xmpp.manager.DiscoManager;
 import eu.siacs.conversations.xmpp.manager.EntityTimeManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.PingManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
@@ -325,10 +326,8 @@ public class IqParser extends AbstractParser implements Consumer<Iq> {
             this.connection.sendErrorFor(packet, new Condition.ServiceUnavailable());
             return;
         }
-        final var jingleConnectionManager =
-                this.mXmppConnectionService.getJingleConnectionManager();
         if (packet.hasExtension(Jingle.class)) {
-            jingleConnectionManager.deliverPacket(getAccount(), packet);
+            this.getManager(JingleManager.class).process(packet);
         } else if (packet.hasExtension(Query.class)) {
             this.getManager(RosterManager.class).push(packet);
         } else if (packet.hasExtension(Block.class)) {
@@ -336,7 +335,7 @@ public class IqParser extends AbstractParser implements Consumer<Iq> {
         } else if (packet.hasExtension(Unblock.class)) {
             this.getManager(BlockingManager.class).pushUnblock(packet);
         } else if (packet.hasExtension(InBandByteStream.class)) {
-            jingleConnectionManager.deliverIbbPacket(getAccount(), packet);
+            this.getManager(JingleManager.class).deliverIbbPacket(packet);
         } else if (packet.hasExtension(Push.class)) {
             this.getManager(UnifiedPushManager.class).push(packet);
         } else {

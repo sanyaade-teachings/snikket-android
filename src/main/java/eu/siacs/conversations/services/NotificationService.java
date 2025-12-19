@@ -716,8 +716,7 @@ public class NotificationService {
     }
 
     public boolean stopSoundAndVibration() {
-        final var jingleRtpConnection =
-                mXmppConnectionService.getJingleConnectionManager().getOngoingRtpConnection();
+        final var jingleRtpConnection = mXmppConnectionService.getOngoingRtpConnection();
         if (jingleRtpConnection == null) {
             return false;
         }

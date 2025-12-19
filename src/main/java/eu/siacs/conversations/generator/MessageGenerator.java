@@ -11,18 +11,9 @@ import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
-import eu.siacs.conversations.xmpp.jingle.JingleConnectionManager;
-import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
-import eu.siacs.conversations.xmpp.jingle.Media;
-import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import im.conversations.android.xmpp.model.correction.Replace;
 import im.conversations.android.xmpp.model.hints.Store;
-import im.conversations.android.xmpp.model.jmi.Finish;
-import im.conversations.android.xmpp.model.jmi.Propose;
-import im.conversations.android.xmpp.model.jmi.Reject;
-import im.conversations.android.xmpp.model.jmi.Retract;
 import im.conversations.android.xmpp.model.markers.Markable;
-import im.conversations.android.xmpp.model.receipts.Request;
 import im.conversations.android.xmpp.model.unique.OriginId;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -147,70 +138,6 @@ public class MessageGenerator extends AbstractGenerator {
             packet.addChild("encryption", "urn:xmpp:eme:0")
                     .setAttribute("namespace", "jabber:x:encrypted");
         }
-        return packet;
-    }
-
-    public im.conversations.android.xmpp.model.stanza.Message sessionFinish(
-            final Jid with, final String sessionId, final Reason reason) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(im.conversations.android.xmpp.model.stanza.Message.Type.CHAT);
-        packet.setTo(with);
-        final var finish = packet.addExtension(new Finish());
-        finish.setAttribute("id", sessionId);
-        final Element reasonElement = finish.addChild("reason", Namespace.JINGLE);
-        reasonElement.addChild(reason.toString());
-        packet.addExtension(new Store());
-        return packet;
-    }
-
-    public im.conversations.android.xmpp.model.stanza.Message sessionProposal(
-            final JingleConnectionManager.RtpSessionProposal proposal) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(
-                im.conversations.android.xmpp.model.stanza.Message.Type
-                        .CHAT); // we want to carbon copy those
-        packet.setTo(proposal.with);
-        packet.setId(JingleRtpConnection.JINGLE_MESSAGE_PROPOSE_ID_PREFIX + proposal.sessionId);
-        final var propose = packet.addExtension(new Propose());
-        propose.setAttribute("id", proposal.sessionId);
-        for (final Media media : proposal.media) {
-            propose.addChild("description", Namespace.JINGLE_APPS_RTP)
-                    .setAttribute("media", media.toString());
-        }
-        packet.addExtension(new Request());
-        packet.addExtension(new Store());
-        return packet;
-    }
-
-    public im.conversations.android.xmpp.model.stanza.Message sessionRetract(
-            final JingleConnectionManager.RtpSessionProposal proposal) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(
-                im.conversations.android.xmpp.model.stanza.Message.Type
-                        .CHAT); // we want to carbon copy those
-        packet.setTo(proposal.with);
-        final var retract = packet.addExtension(new Retract());
-        retract.setAttribute("id", proposal.sessionId);
-        retract.addChild("description", Namespace.JINGLE_APPS_RTP);
-        packet.addExtension(new Store());
-        return packet;
-    }
-
-    public im.conversations.android.xmpp.model.stanza.Message sessionReject(
-            final Jid with, final String sessionId) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(
-                im.conversations.android.xmpp.model.stanza.Message.Type
-                        .CHAT); // we want to carbon copy those
-        packet.setTo(with);
-        final var reject = packet.addExtension(new Reject());
-        reject.setAttribute("id", sessionId);
-        reject.addChild("description", Namespace.JINGLE_APPS_RTP);
-        packet.addExtension(new Store());
         return packet;
     }
 }

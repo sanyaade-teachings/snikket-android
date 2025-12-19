@@ -28,12 +28,12 @@ import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.crypto.axolotl.CryptoFailedException;
 import eu.siacs.conversations.crypto.axolotl.FingerprintStatus;
-import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.RtpSessionStatus;
 import eu.siacs.conversations.services.CallIntegration;
+import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.ui.RtpSessionActivity;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
@@ -44,8 +44,14 @@ import eu.siacs.conversations.xmpp.jingle.stanzas.IceUdpTransportInfo;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.jingle.stanzas.RtpDescription;
 import eu.siacs.conversations.xmpp.manager.ExternalServiceDiscoveryManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
+import eu.siacs.conversations.xmpp.manager.JingleMessageManager;
+import im.conversations.android.xmpp.model.error.Condition;
+import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.jmi.Accept;
+import im.conversations.android.xmpp.model.jmi.Finish;
 import im.conversations.android.xmpp.model.jmi.JingleMessage;
 import im.conversations.android.xmpp.model.jmi.Proceed;
 import im.conversations.android.xmpp.model.jmi.Propose;
@@ -98,18 +104,9 @@ public class JingleRtpConnection extends AbstractJingleConnection
     private final Queue<PeerConnection.PeerConnectionState> stateHistory = new LinkedList<>();
     private ScheduledFuture<?> ringingTimeoutFuture;
 
-    JingleRtpConnection(
-            final JingleConnectionManager jingleConnectionManager,
-            final Id id,
-            final Jid initiator) {
-        this(
-                jingleConnectionManager,
-                id,
-                initiator,
-                new CallIntegration(
-                        jingleConnectionManager
-                                .getXmppConnectionService()
-                                .getApplicationContext()));
+    public JingleRtpConnection(
+            final XmppConnectionService service, final Id id, final Jid initiator) {
+        this(service, id, initiator, new CallIntegration(service.getApplicationContext()));
         this.callIntegration.setAddress(
                 CallIntegration.address(id.with.asBareJid()), TelecomManager.PRESENTATION_ALLOWED);
         final var contact = id.getContact();
@@ -118,16 +115,14 @@ public class JingleRtpConnection extends AbstractJingleConnection
         this.callIntegration.setInitialized();
     }
 
-    JingleRtpConnection(
-            final JingleConnectionManager jingleConnectionManager,
+    public JingleRtpConnection(
+            final XmppConnectionService service,
             final Id id,
             final Jid initiator,
             final CallIntegration callIntegration) {
-        super(jingleConnectionManager, id, initiator);
+        super(service, id, initiator);
         final Conversation conversation =
-                jingleConnectionManager
-                        .getXmppConnectionService()
-                        .findOrCreateConversation(id.account, id.with.asBareJid(), false, false);
+                service.findOrCreateConversation(id.account, id.with.asBareJid(), false, false);
         this.message =
                 new Message(
                         conversation,
@@ -139,7 +134,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
     }
 
     @Override
-    synchronized void deliverPacket(final Iq iq) {
+    public synchronized void deliverPacket(final Iq iq) {
         final var jingle = iq.getExtension(Jingle.class);
         switch (jingle.getAction()) {
             case SESSION_INITIATE -> receiveSessionInitiate(iq, jingle);
@@ -163,7 +158,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
     }
 
     @Override
-    synchronized void notifyRebound() {
+    public synchronized void notifyRebound() {
         if (isTerminated()) {
             return;
         }
@@ -360,7 +355,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                         Config.LOGTAG,
                         id.getAccount().getJid().asBareJid()
                                 + ": respond with tie break to matching content-add offer");
-                respondWithTieBreak(jinglePacket);
+                this.sendErrorFor(jinglePacket, new JingleCondition.TieBreak());
             } else {
                 Log.d(
                         Config.LOGTAG,
@@ -539,7 +534,10 @@ public class JingleRtpConnection extends AbstractJingleConnection
             this.autoAcceptContentModify(modifiedRemoteContentMap, offer);
         } else {
             Log.d(Config.LOGTAG, "received unsupported content modification " + modification);
-            respondWithItemNotFound(jinglePacket);
+            this.id
+                    .account
+                    .getXmppConnection()
+                    .sendErrorFor(jinglePacket, new Condition.ItemNotFound());
         }
     }
 
@@ -771,27 +769,29 @@ public class JingleRtpConnection extends AbstractJingleConnection
                                 .toStub()
                                 .toJinglePacket(Jingle.Action.CONTENT_MODIFY, id.sessionId);
                 proposedContentModification.setTo(id.with);
-                xmppConnectionService.sendIqPacket(
-                        id.account,
-                        proposedContentModification,
-                        (response) -> {
-                            if (response.getType() == Iq.Type.RESULT) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        id.account.getJid().asBareJid()
-                                                + ": remote has accepted our upgrade to"
-                                                + " senders=both");
-                                acceptContentAdd(
-                                        ContentAddition.summary(modifiedSenders), modifiedSenders);
-                            } else {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        id.account.getJid().asBareJid()
-                                                + ": remote has rejected our upgrade to"
-                                                + " senders=both");
-                                acceptContentAdd(contentAddition, incomingContentAdd);
-                            }
-                        });
+                id.account
+                        .getXmppConnection()
+                        .sendIqPacket(
+                                proposedContentModification,
+                                (response) -> {
+                                    if (response.getType() == Iq.Type.RESULT) {
+                                        Log.d(
+                                                Config.LOGTAG,
+                                                id.account.getJid().asBareJid()
+                                                        + ": remote has accepted our upgrade to"
+                                                        + " senders=both");
+                                        acceptContentAdd(
+                                                ContentAddition.summary(modifiedSenders),
+                                                modifiedSenders);
+                                    } else {
+                                        Log.d(
+                                                Config.LOGTAG,
+                                                id.account.getJid().asBareJid()
+                                                        + ": remote has rejected our upgrade to"
+                                                        + " senders=both");
+                                        acceptContentAdd(contentAddition, incomingContentAdd);
+                                    }
+                                });
             } else {
                 acceptContentAdd(contentAddition, incomingContentAdd);
             }
@@ -953,7 +953,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                 return isOffer;
             } else {
                 Log.d(Config.LOGTAG, "ignoring ICE restart. sending tie-break");
-                respondWithTieBreak(jinglePacket);
+                this.sendErrorFor(jinglePacket, new JingleCondition.TieBreak());
                 return true;
             }
         } catch (final Exception exception) {
@@ -1490,7 +1490,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         }
     }
 
-    synchronized void deliveryMessage(
+    public synchronized void deliveryMessage(
             final Jid from,
             final JingleMessage message,
             final String serverMessageId,
@@ -1512,7 +1512,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         }
     }
 
-    void deliverFailedProceed(final String message) {
+    public void deliverFailedProceed(final String message) {
         Log.d(
                 Config.LOGTAG,
                 id.account.getJid().asBareJid()
@@ -1674,7 +1674,10 @@ public class JingleRtpConnection extends AbstractJingleConnection
             // 'ringing'
             if (Config.JINGLE_MESSAGE_INIT_STRICT_DEVICE_TIMEOUT
                     || id.getContact().showInContactList()) {
-                sendJingleMessage("ringing");
+                id.account
+                        .getXmppConnection()
+                        .getManager(JingleMessageManager.class)
+                        .ringing(id.with, id.sessionId);
             }
         } else {
             Log.d(
@@ -1694,8 +1697,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                         + id.with
                         + ". start ringing");
         ringingTimeoutFuture =
-                jingleConnectionManager.schedule(
-                        this::ringingTimeout, BUSY_TIME_OUT, TimeUnit.SECONDS);
+                JingleManager.schedule(this::ringingTimeout, BUSY_TIME_OUT, TimeUnit.SECONDS);
         if (CallIntegration.selfManaged(xmppConnectionService)) {
             return;
         }
@@ -1883,8 +1885,11 @@ public class JingleRtpConnection extends AbstractJingleConnection
     }
 
     private void sendRetract(final Reason reason) {
-        // TODO embed reason into retract
-        sendJingleMessage("retract", id.with.asBareJid());
+        // TODO embed reason into retract (because this is most likely an application failure)
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .retract(id.with.asBareJid(), id.sessionId);
         transitionOrThrow(reasonToState(reason));
         this.finish();
     }
@@ -2320,7 +2325,10 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     private void retractFromProceed() {
         Log.d(Config.LOGTAG, "retract from proceed");
-        this.sendJingleMessage("retract");
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .retract(id.with, id.sessionId);
         closeTransitionLogFinish(State.RETRACTED_RACED);
     }
 
@@ -2336,7 +2344,11 @@ public class JingleRtpConnection extends AbstractJingleConnection
             final Collection<PeerConnection.IceServer> iceServers,
             final boolean trickle)
             throws WebRTCWrapper.InitializationException {
-        this.jingleConnectionManager.ensureConnectionIsRegistered(this);
+        this.id
+                .account
+                .getXmppConnection()
+                .getManager(JingleManager.class)
+                .ensureConnectionIsRegistered(this);
         this.webRTCWrapper.setup(this.xmppConnectionService);
         final var appSettings = new AppSettings(xmppConnectionService.getApplicationContext());
         this.webRTCWrapper.initializePeerConnection(
@@ -2349,20 +2361,35 @@ public class JingleRtpConnection extends AbstractJingleConnection
         transitionOrThrow(State.PROCEED);
         xmppConnectionService.getNotificationService().cancelIncomingCallNotification();
         this.callIntegration.startAudioRouting();
-        this.sendJingleMessage("accept", id.account.getJid().asBareJid());
-        this.sendJingleMessage("proceed");
+        id.account.getXmppConnection().getManager(JingleMessageManager.class).accept(id.sessionId);
+        final Integer deviceId;
+        if (isOmemoEnabled()) {
+            deviceId = id.account.getAxolotlService().getOwnDeviceId();
+        } else {
+            deviceId = null;
+        }
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .proceed(id.with, id.sessionId, deviceId);
     }
 
     private void rejectCallFromProposed() {
         transitionOrThrow(State.REJECTED);
         writeLogMessageMissed();
         xmppConnectionService.getNotificationService().cancelIncomingCallNotification();
-        this.sendJingleMessage("reject");
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .reject(id.with, id.sessionId);
         finish();
     }
 
     private void rejectCallFromProceed() {
-        this.sendJingleMessage("reject");
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .reject(id.with, id.sessionId);
         closeTransitionLogFinish(State.REJECTED_RACED);
     }
 
@@ -2372,40 +2399,10 @@ public class JingleRtpConnection extends AbstractJingleConnection
         xmppConnectionService.getNotificationService().cancelIncomingCallNotification();
     }
 
-    private void sendJingleMessage(final String action) {
-        sendJingleMessage(action, id.with);
-    }
-
-    private void sendJingleMessage(final String action, final Jid to) {
-        final var messagePacket = new im.conversations.android.xmpp.model.stanza.Message();
-        messagePacket.setType(
-                im.conversations.android.xmpp.model.stanza.Message.Type
-                        .CHAT); // we want to carbon copy those
-        messagePacket.setTo(to);
-        final Element intent =
-                messagePacket
-                        .addChild(action, Namespace.JINGLE_MESSAGE)
-                        .setAttribute("id", id.sessionId);
-        if ("proceed".equals(action)) {
-            messagePacket.setId(JINGLE_MESSAGE_PROCEED_ID_PREFIX + id.sessionId);
-            if (isOmemoEnabled()) {
-                final int deviceId = id.account.getAxolotlService().getOwnDeviceId();
-                final Element device =
-                        intent.addChild("device", Namespace.OMEMO_DTLS_SRTP_VERIFICATION);
-                device.setAttribute("id", deviceId);
-            }
-        }
-        messagePacket.addChild("store", "urn:xmpp:hints");
-        xmppConnectionService.sendMessagePacket(id.account, messagePacket);
-    }
-
     private void sendJingleMessageFinish(final Reason reason) {
         final var account = id.getAccount();
-        final var messagePacket =
-                xmppConnectionService
-                        .getMessageGenerator()
-                        .sessionFinish(id.with, id.sessionId, reason);
-        xmppConnectionService.sendMessagePacket(account, messagePacket);
+        final var messagePacket = sessionFinish(id.with, id.sessionId, reason);
+        this.id.account.getXmppConnection().sendMessagePacket(messagePacket);
     }
 
     private boolean isOmemoEnabled() {
@@ -2564,27 +2561,31 @@ public class JingleRtpConnection extends AbstractJingleConnection
         final Iq iq = transportInfo.toJinglePacket(Jingle.Action.TRANSPORT_INFO, id.sessionId);
         Log.d(Config.LOGTAG, "initiating ice restart: " + iq);
         iq.setTo(id.with);
-        xmppConnectionService.sendIqPacket(
-                id.account,
-                iq,
-                (response) -> {
-                    if (response.getType() == Iq.Type.RESULT) {
-                        Log.d(Config.LOGTAG, "received success to our ice restart");
-                        setLocalContentMap(rtpContentMap);
-                        webRTCWrapper.setIsReadyToReceiveIceCandidates(true);
-                        return;
-                    }
-                    if (response.getType() == Iq.Type.ERROR) {
-                        if (isTieBreak(response)) {
-                            Log.d(Config.LOGTAG, "received tie-break as result of ice restart");
-                            return;
-                        }
-                        handleIqErrorResponse(response);
-                    }
-                    if (response.getType() == Iq.Type.TIMEOUT) {
-                        handleIqTimeoutResponse(response);
-                    }
-                });
+        this.id
+                .account
+                .getXmppConnection()
+                .sendIqPacket(
+                        iq,
+                        (response) -> {
+                            if (response.getType() == Iq.Type.RESULT) {
+                                Log.d(Config.LOGTAG, "received success to our ice restart");
+                                setLocalContentMap(rtpContentMap);
+                                webRTCWrapper.setIsReadyToReceiveIceCandidates(true);
+                                return;
+                            }
+                            if (response.getType() == Iq.Type.ERROR) {
+                                if (isTieBreak(response)) {
+                                    Log.d(
+                                            Config.LOGTAG,
+                                            "received tie-break as result of ice restart");
+                                    return;
+                                }
+                                handleIqErrorResponse(response);
+                            }
+                            if (response.getType() == Iq.Type.TIMEOUT) {
+                                handleIqTimeoutResponse(response);
+                            }
+                        });
     }
 
     private boolean isTieBreak(final Iq response) {
@@ -2615,32 +2616,35 @@ public class JingleRtpConnection extends AbstractJingleConnection
     }
 
     private void sendContentAdd(final RtpContentMap contentAdd) {
-
         final Iq iq = contentAdd.toJinglePacket(Jingle.Action.CONTENT_ADD, id.sessionId);
         iq.setTo(id.with);
-        xmppConnectionService.sendIqPacket(
-                id.account,
-                iq,
-                (response) -> {
-                    if (response.getType() == Iq.Type.RESULT) {
-                        Log.d(
-                                Config.LOGTAG,
-                                id.getAccount().getJid().asBareJid()
-                                        + ": received ACK to our content-add");
-                        return;
-                    }
-                    if (response.getType() == Iq.Type.ERROR) {
-                        if (isTieBreak(response)) {
-                            this.outgoingContentAdd = null;
-                            Log.d(Config.LOGTAG, "received tie-break as result of our content-add");
-                            return;
-                        }
-                        handleIqErrorResponse(response);
-                    }
-                    if (response.getType() == Iq.Type.TIMEOUT) {
-                        handleIqTimeoutResponse(response);
-                    }
-                });
+        this.id
+                .account
+                .getXmppConnection()
+                .sendIqPacket(
+                        iq,
+                        (response) -> {
+                            if (response.getType() == Iq.Type.RESULT) {
+                                Log.d(
+                                        Config.LOGTAG,
+                                        id.getAccount().getJid().asBareJid()
+                                                + ": received ACK to our content-add");
+                                return;
+                            }
+                            if (response.getType() == Iq.Type.ERROR) {
+                                if (isTieBreak(response)) {
+                                    this.outgoingContentAdd = null;
+                                    Log.d(
+                                            Config.LOGTAG,
+                                            "received tie-break as result of our content-add");
+                                    return;
+                                }
+                                handleIqErrorResponse(response);
+                            }
+                            if (response.getType() == Iq.Type.TIMEOUT) {
+                                handleIqTimeoutResponse(response);
+                            }
+                        });
     }
 
     private void setLocalContentMap(final RtpContentMap rtpContentMap) {
@@ -2869,7 +2873,11 @@ public class JingleRtpConnection extends AbstractJingleConnection
             this.cancelRingingTimeout();
             this.callIntegration.verifyDisconnected();
             this.webRTCWrapper.verifyClosed();
-            this.jingleConnectionManager.setTerminalSessionState(id, getEndUserState(), getMedia());
+            this.id
+                    .account
+                    .getXmppConnection()
+                    .getManager(JingleManager.class)
+                    .setTerminalSessionState(id, getEndUserState(), getMedia());
             super.finish();
         } else {
             throw new IllegalStateException(
@@ -2920,7 +2928,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         return webRTCWrapper.getEglBaseContext();
     }
 
-    void setProposedMedia(final Set<Media> media) {
+    public void setProposedMedia(final Set<Media> media) {
         this.proposedMedia = media;
         this.callIntegration.setVideoState(
                 Media.audioOnly(media)
@@ -2952,11 +2960,6 @@ public class JingleRtpConnection extends AbstractJingleConnection
     }
 
     @Override
-    public Account getAccount() {
-        return id.account;
-    }
-
-    @Override
     public Jid getWith() {
         return id.with;
     }
@@ -2968,5 +2971,19 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     private interface OnIceServersDiscovered {
         void onIceServersDiscovered(Collection<PeerConnection.IceServer> iceServers);
+    }
+
+    private static im.conversations.android.xmpp.model.stanza.Message sessionFinish(
+            final Jid with, final String sessionId, final Reason reason) {
+        final im.conversations.android.xmpp.model.stanza.Message packet =
+                new im.conversations.android.xmpp.model.stanza.Message();
+        packet.setType(im.conversations.android.xmpp.model.stanza.Message.Type.CHAT);
+        packet.setTo(with);
+        final var finish = packet.addExtension(new Finish());
+        finish.setAttribute("id", sessionId);
+        final Element reasonElement = finish.addChild("reason", Namespace.JINGLE);
+        reasonElement.addChild(reason.toString());
+        packet.addExtension(new Store());
+        return packet;
     }
 }

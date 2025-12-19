@@ -28,6 +28,9 @@ public class Fallback extends Extension {
         }
         for (final var fallback : message.getExtensions(Fallback.class)) {
             if (id.namespace.equals(fallback.getFor())) {
+                if (fallback.isNoChildren()) {
+                    return Optional.of(new FullRange());
+                }
                 final var e = fallback.getExtension(element);
                 if (e != null) {
                     return Optional.of(e.getRange());
@@ -35,6 +38,11 @@ public class Fallback extends Extension {
             }
         }
         return Optional.absent();
+    }
+
+    private boolean isNoChildren() {
+        return this.getExtensions(Body.class).isEmpty()
+                && this.getExtensions(Subject.class).isEmpty();
     }
 
     public sealed interface Range permits StartEndRange, FullRange {

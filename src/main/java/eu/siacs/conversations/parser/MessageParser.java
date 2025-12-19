@@ -351,10 +351,12 @@ public class MessageParser extends AbstractParser
                 return;
             }
         }
-
         final boolean bodyIsFallback;
         if (body != null && packet.hasExtension(Reactions.class)) {
             final var range = Fallback.get(packet, Reactions.class, Body.class);
+            bodyIsFallback = range.isPresent() && range.get().isEntire(body);
+        } else if (body != null && packet.hasExtension(Retract.class)) {
+            final var range = Fallback.get(packet, Retract.class, Body.class);
             bodyIsFallback = range.isPresent() && range.get().isEntire(body);
         } else {
             bodyIsFallback = false;

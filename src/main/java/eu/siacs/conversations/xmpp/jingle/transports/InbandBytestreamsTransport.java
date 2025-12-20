@@ -2,8 +2,6 @@ package eu.siacs.conversations.xmpp.jingle.transports;
 
 import android.util.Log;
 import androidx.annotation.NonNull;
-import com.google.common.base.Strings;
-import com.google.common.io.BaseEncoding;
 import com.google.common.io.Closeables;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
@@ -11,11 +9,15 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import eu.siacs.conversations.Config;
-import eu.siacs.conversations.xml.Element;
-import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.jingle.stanzas.IbbTransportInfo;
+import im.conversations.android.xmpp.IqProcessingException;
+import im.conversations.android.xmpp.model.error.Condition;
+import im.conversations.android.xmpp.model.ibb.Close;
+import im.conversations.android.xmpp.model.ibb.Data;
+import im.conversations.android.xmpp.model.ibb.InBandByteStream;
+import im.conversations.android.xmpp.model.ibb.Open;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import java.io.Closeable;
 import java.io.IOException;
@@ -97,9 +99,9 @@ public class InbandBytestreamsTransport implements Transport {
     private void openInBandTransport() {
         final var iqPacket = new Iq(Iq.Type.SET);
         iqPacket.setTo(with);
-        final var open = iqPacket.addChild("open", Namespace.IBB);
-        open.setAttribute("block-size", this.blockSize);
-        open.setAttribute("sid", this.streamId);
+        final var open = iqPacket.addExtension(new Open());
+        open.setBlockSize(this.blockSize);
+        open.setSid(this.streamId);
         Log.d(Config.LOGTAG, "sending ibb open");
         Log.d(Config.LOGTAG, iqPacket.toString());
         final var future = xmppConnection.sendIqPacket(iqPacket);
@@ -115,75 +117,93 @@ public class InbandBytestreamsTransport implements Transport {
 
                     @Override
                     public void onFailure(@NonNull Throwable t) {
+                        Log.d(Config.LOGTAG, "could not open IBB transport", t);
                         InbandBytestreamsTransport.this.transportCallback.onTransportSetupFailed();
                     }
                 },
                 MoreExecutors.directExecutor());
     }
 
-    public boolean deliverPacket(
-            final PacketType packetType, final Jid from, final Element payload) {
+    public void deliverPacket(final Jid from, final InBandByteStream inBandByteStream)
+            throws IqProcessingException {
         if (from == null || !from.equals(with)) {
             Log.d(
                     Config.LOGTAG,
                     "ibb packet received from wrong address. was " + from + " expected " + with);
-            return false;
+            throw new IqProcessingException(new Condition.ItemNotFound(), "Session not found");
         }
-        return switch (packetType) {
-            case OPEN -> receiveOpen();
-            case DATA -> receiveData(payload.getContent());
-            case CLOSE -> receiveClose();
-            default -> throw new IllegalArgumentException("Invalid packet type");
-        };
+        switch (inBandByteStream) {
+            case Open open -> receiveOpen(open);
+            case Data data -> receiveData(data);
+            case Close ignored -> receiveClose();
+            default ->
+                    throw new IqProcessingException(
+                            new Condition.BadRequest(), "Invalid IBB packet type");
+        }
+        ;
     }
 
-    private boolean receiveData(final String encoded) {
+    private void receiveData(final Data data) throws IqProcessingException {
         final byte[] buffer;
-        if (Strings.isNullOrEmpty(encoded)) {
-            buffer = new byte[0];
-        } else {
-            buffer = BaseEncoding.base64().decode(encoded);
+        try {
+            buffer = data.asBytes();
+        } catch (final IllegalStateException e) {
+            throw new IqProcessingException(
+                    new Condition.BadRequest(), "received invalid ibb data", e);
+        }
+        if (buffer.length > this.blockSize) {
+            throw new IqProcessingException(
+                    new Condition.BadRequest(), "block size larger than expected");
         }
         Log.d(Config.LOGTAG, "ibb received " + buffer.length + " bytes");
         try {
             pipedOutputStream.write(buffer);
             pipedOutputStream.flush();
-            return true;
         } catch (final IOException e) {
-            Log.d(Config.LOGTAG, "unable to receive ibb data", e);
-            return false;
+            throw new IqProcessingException(
+                    new Condition.ResourceConstraint(), "Unable to receive IBB data", e);
         }
     }
 
-    private boolean receiveClose() {
+    private void receiveClose() throws IqProcessingException {
         if (this.isReceiving.compareAndSet(true, false)) {
             try {
                 this.pipedOutputStream.close();
-                return true;
             } catch (final IOException e) {
-                Log.d(Config.LOGTAG, "could not close pipedOutStream");
-                return false;
+                throw new IqProcessingException(
+                        new Condition.ResourceConstraint(), "Could not close stream", e);
             }
         } else {
-            Log.d(Config.LOGTAG, "received ibb close but was not receiving");
-            return false;
+            throw new IqProcessingException(
+                    new Condition.BadRequest(), "received ibb close but was not receiving");
         }
     }
 
-    private boolean receiveOpen() {
+    private void receiveOpen(final Open open) throws IqProcessingException {
         Log.d(Config.LOGTAG, "receiveOpen()");
+        final var openBlockSize = open.getBlockSize();
+        if (this.blockSize != openBlockSize) {
+            throw new IqProcessingException(
+                    new Condition.BadRequest(),
+                    String.format(
+                            "open block size (%d) does not matched configured block size (%d)",
+                            openBlockSize, this.blockSize));
+        }
         if (this.isReceiving.get()) {
-            Log.d(Config.LOGTAG, "ibb received open even though we were already open");
-            return false;
+            throw new IqProcessingException(
+                    new Condition.BadRequest(),
+                    "ibb received open even though we were already open");
         }
         this.isReceiving.set(true);
         transportCallback.onTransportEstablished();
-        return true;
     }
 
     public void terminate() {
-        // TODO send close
         Log.d(Config.LOGTAG, "IbbTransport.terminate()");
+        final var iqPacket = new Iq(Iq.Type.SET);
+        iqPacket.setTo(with);
+        final var close = iqPacket.addExtension(new Close());
+        close.setSid(this.streamId);
         this.terminationLatch.countDown();
         this.blockSender.close();
         this.blockSenderThread.interrupt();
@@ -291,10 +311,10 @@ public class InbandBytestreamsTransport implements Transport {
             Log.d(Config.LOGTAG, "sending ibb block #" + sequence + " " + block.length + " bytes");
             final var iqPacket = new Iq(Iq.Type.SET);
             iqPacket.setTo(with);
-            final var data = iqPacket.addChild("data", Namespace.IBB);
-            data.setAttribute("sid", this.streamId);
-            data.setAttribute("seq", sequence);
-            data.setContent(BaseEncoding.base64().encode(block));
+            final var data = iqPacket.addExtension(new Data());
+            data.setSid(this.streamId);
+            data.setSequence(sequence);
+            data.setContent(block);
             final var future = this.xmppConnection.sendIqPacket(iqPacket);
             Futures.addCallback(
                     future,
@@ -325,11 +345,5 @@ public class InbandBytestreamsTransport implements Transport {
         public void setBlockSize(final int blockSize) {
             this.blockSize = blockSize;
         }
-    }
-
-    public enum PacketType {
-        OPEN,
-        DATA,
-        CLOSE
     }
 }

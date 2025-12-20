@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 import com.google.common.base.Objects;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Collections2;
@@ -25,7 +26,6 @@ import eu.siacs.conversations.services.CallIntegration;
 import eu.siacs.conversations.services.CallIntegrationConnectionService;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.utils.CryptoHelper;
-import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.XmppConnection;
@@ -41,7 +41,9 @@ import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.jingle.stanzas.RtpDescription;
 import eu.siacs.conversations.xmpp.jingle.transports.InbandBytestreamsTransport;
 import eu.siacs.conversations.xmpp.jingle.transports.Transport;
+import im.conversations.android.xmpp.IqProcessingException;
 import im.conversations.android.xmpp.model.error.Condition;
+import im.conversations.android.xmpp.model.ibb.InBandByteStream;
 import im.conversations.android.xmpp.model.jingle.Jingle;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.jmi.Accept;
@@ -867,38 +869,18 @@ public class JingleManager extends AbstractManager {
     }
 
     public void deliverIbbPacket(final Iq packet) {
-        // TODO use extensions
-
-        // TODO we don’t need this paket type BS if we have extensions. Just get the
-
-        // TODO check if error conditions make sense
-
-        final String sid;
-        final Element payload;
-        final InbandBytestreamsTransport.PacketType packetType;
-        if (packet.hasChild("open", Namespace.IBB)) {
-            packetType = InbandBytestreamsTransport.PacketType.OPEN;
-            payload = packet.findChild("open", Namespace.IBB);
-            sid = payload.getAttribute("sid");
-        } else if (packet.hasChild("data", Namespace.IBB)) {
-            packetType = InbandBytestreamsTransport.PacketType.DATA;
-            payload = packet.findChild("data", Namespace.IBB);
-            sid = payload.getAttribute("sid");
-        } else if (packet.hasChild("close", Namespace.IBB)) {
-            packetType = InbandBytestreamsTransport.PacketType.CLOSE;
-            payload = packet.findChild("close", Namespace.IBB);
-            sid = payload.getAttribute("sid");
-        } else {
-            packetType = null;
-            payload = null;
-            sid = null;
+        final var inbandByteStream = packet.getOnlyExtension(InBandByteStream.class);
+        if (inbandByteStream == null) {
+            this.connection.sendErrorFor(packet, new Condition.BadRequest());
+            return;
         }
-        if (sid == null) {
+        final var sid = inbandByteStream.getSid();
+        if (Strings.isNullOrEmpty(sid)) {
             Log.d(
                     Config.LOGTAG,
                     getAccount().getJid().asBareJid()
                             + ": unable to deliver ibb packet. missing sid");
-            connection.sendErrorFor(packet, new Condition.ItemNotFound());
+            this.connection.sendErrorFor(packet, new Condition.BadRequest());
             return;
         }
         for (final AbstractJingleConnection connection : this.connections.values()) {
@@ -906,10 +888,11 @@ public class JingleManager extends AbstractManager {
                 final Transport transport = fileTransfer.getTransport();
                 if (transport instanceof InbandBytestreamsTransport inBandTransport) {
                     if (sid.equals(inBandTransport.getStreamId())) {
-                        if (inBandTransport.deliverPacket(packetType, packet.getFrom(), payload)) {
+                        try {
+                            inBandTransport.deliverPacket(packet.getFrom(), inbandByteStream);
                             this.connection.sendResultFor(packet);
-                        } else {
-                            this.connection.sendErrorFor(packet, new Condition.BadRequest());
+                        } catch (final IqProcessingException e) {
+                            this.connection.sendErrorFor(packet, e);
                         }
                         return;
                     }

@@ -77,6 +77,7 @@ import eu.siacs.conversations.xmpp.manager.PingManager;
 import eu.siacs.conversations.xmpp.manager.RegistrationManager;
 import im.conversations.android.xmpp.Entity;
 import im.conversations.android.xmpp.IqErrorException;
+import im.conversations.android.xmpp.IqProcessingException;
 import im.conversations.android.xmpp.model.AuthenticationFailure;
 import im.conversations.android.xmpp.model.AuthenticationRequest;
 import im.conversations.android.xmpp.model.AuthenticationStreamFeature;
@@ -88,6 +89,7 @@ import im.conversations.android.xmpp.model.cb.SaslChannelBinding;
 import im.conversations.android.xmpp.model.csi.Active;
 import im.conversations.android.xmpp.model.csi.Inactive;
 import im.conversations.android.xmpp.model.error.Condition;
+import im.conversations.android.xmpp.model.error.Text;
 import im.conversations.android.xmpp.model.fast.Fast;
 import im.conversations.android.xmpp.model.fast.RequestToken;
 import im.conversations.android.xmpp.model.sasl.Auth;
@@ -2487,9 +2489,27 @@ public class XmppConnection implements Runnable {
         this.sendPacket(response);
     }
 
+    public void sendErrorFor(final Iq request, final IqProcessingException exception) {
+        final var condition = exception.getCondition();
+        final var text = exception.getText();
+        if (Strings.isNullOrEmpty(text)) {
+            sendErrorFor(request, condition);
+        } else {
+            sendErrorFor(request, condition, new Text(text));
+        }
+    }
+
     public void sendErrorFor(
             final Stanza request,
             final Condition condition,
+            final im.conversations.android.xmpp.model.error.Error.Extension... extensions) {
+        sendErrorFor(request, condition, null, extensions);
+    }
+
+    public void sendErrorFor(
+            final Stanza request,
+            final Condition condition,
+            final Text text,
             final im.conversations.android.xmpp.model.error.Error.Extension... extensions) {
         final var from = request.getFrom();
         final var id = request.getId();
@@ -2508,6 +2528,9 @@ public class XmppConnection implements Runnable {
         }
         error.setCondition(condition);
         error.addExtensions(extensions);
+        if (text != null) {
+            error.addText(text);
+        }
         this.sendPacket(response);
     }
 

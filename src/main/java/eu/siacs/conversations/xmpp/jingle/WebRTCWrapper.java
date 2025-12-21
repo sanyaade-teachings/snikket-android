@@ -94,7 +94,6 @@ public class WebRTCWrapper {
                     // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/removeTrack
                     Log.d(EXTENDED_LOGGING_TAG, "onSignalingChange(" + signalingState + ")");
 
-
                     // if we limit ice transports types to RELAYS and do not actually provide any
                     // WebRTC will never go into CONNECTING state and thus never into FAILED state.
                     // To work around that issue we trigger an artificial application layer FAILED

@@ -1231,12 +1231,7 @@ public class XmppConnection implements Runnable {
                 mXmppConnectionService.updateConversationUi();
             }
         } else {
-            Log.d(
-                    Config.LOGTAG,
-                    account.getJid().asBareJid()
-                            + ": resumption failed ("
-                            + XmlHelper.print(failed.getChildren())
-                            + ")");
+            Log.d(Config.LOGTAG, account.getJid().asBareJid() + ": resumption failed");
         }
         resetStreamId();
         if (sendBindRequest) {
@@ -2417,14 +2412,13 @@ public class XmppConnection implements Runnable {
     }
 
     private void sendStartStream(final boolean from, final boolean flush) throws IOException {
-        final Tag stream = Tag.start("stream:stream");
+        final Tag stream = Tag.start("stream:stream", Namespace.JABBER_CLIENT);
         stream.setAttribute("to", account.getServer());
         if (from) {
             stream.setAttribute("from", account.getJid().asBareJid().toString());
         }
         stream.setAttribute("version", "1.0");
         stream.setAttribute("xml:lang", LocalizedContent.STREAM_LANGUAGE);
-        stream.setAttribute("xmlns", Namespace.JABBER_CLIENT);
         stream.setAttribute("xmlns:stream", Namespace.STREAMS);
         tagWriter.writeTag(stream, flush);
     }

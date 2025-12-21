@@ -57,8 +57,7 @@ public class XmlReader implements Closeable {
         try {
             while (this.is != null && parser.next() != XmlPullParser.END_DOCUMENT) {
                 if (parser.getEventType() == XmlPullParser.START_TAG) {
-                    Tag tag = Tag.start(parser.getName());
-                    final String xmlns = parser.getNamespace();
+                    Tag tag = Tag.start(parser.getName(), parser.getNamespace());
                     for (int i = 0; i < parser.getAttributeCount(); ++i) {
                         // TODO we would also look at parser.getAttributeNamespace()
                         final String prefix = parser.getAttributePrefix(i);
@@ -69,9 +68,6 @@ public class XmlReader implements Closeable {
                             name = parser.getAttributeName(i);
                         }
                         tag.setAttribute(name, parser.getAttributeValue(i));
-                    }
-                    if (xmlns != null) {
-                        tag.setAttribute("xmlns", xmlns);
                     }
                     return tag;
                 } else if (parser.getEventType() == XmlPullParser.END_TAG) {
@@ -104,8 +100,7 @@ public class XmlReader implements Closeable {
     }
 
     public Element readElement(final Tag currentTag) throws IOException {
-        final var attributes = currentTag.getAttributes();
-        final var namespace = attributes.get("xmlns");
+        final var namespace = currentTag.getNamespace();
         final var name = currentTag.getName();
         final Element element = ExtensionFactory.create(name, namespace);
         element.setAttributes(currentTag.getAttributes());

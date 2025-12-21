@@ -1,12 +1,10 @@
 package eu.siacs.conversations.xml;
 
-import androidx.annotation.NonNull;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
-import eu.siacs.conversations.utils.XmlHelper;
 import eu.siacs.conversations.xmpp.Jid;
 import im.conversations.android.xmpp.model.stanza.Message;
 import java.time.Instant;
@@ -17,17 +15,20 @@ import java.util.List;
 
 public class Element {
     private final String name;
+    private final String namespace;
+
     private Hashtable<String, String> attributes = new Hashtable<>();
     private String content;
     protected List<Element> children = new ArrayList<>();
 
-    public Element(String name) {
+    public Element(final String name) {
         this.name = name;
+        this.namespace = null;
     }
 
-    public Element(String name, String xmlns) {
+    public Element(final String name, final String namespace) {
         this.name = name;
-        this.setAttribute("xmlns", xmlns);
+        this.namespace = namespace;
     }
 
     public Element addChild(Element child) {
@@ -36,17 +37,16 @@ public class Element {
         return child;
     }
 
-    public Element addChild(String name) {
+    public Element addChild(final String name) {
         this.content = null;
-        Element child = new Element(name);
+        Element child = new Element(name, this.namespace);
         children.add(child);
         return child;
     }
 
-    public Element addChild(String name, String xmlns) {
+    public Element addChild(final String name, final String xmlns) {
         this.content = null;
-        Element child = new Element(name);
-        child.setAttribute("xmlns", xmlns);
+        Element child = new Element(name, xmlns);
         children.add(child);
         return child;
     }
@@ -73,7 +73,7 @@ public class Element {
 
     public Element findChild(String name, String xmlns) {
         for (Element child : this.children) {
-            if (name.equals(child.getName()) && xmlns.equals(child.getAttribute("xmlns"))) {
+            if (name.equals(child.getName()) && xmlns.equals(child.getNamespace())) {
                 return child;
             }
         }
@@ -83,7 +83,7 @@ public class Element {
     public Element findChildEnsureSingle(String name, String xmlns) {
         final List<Element> results = new ArrayList<>();
         for (Element child : this.children) {
-            if (name.equals(child.getName()) && xmlns.equals(child.getAttribute("xmlns"))) {
+            if (name.equals(child.getName()) && xmlns.equals(child.getNamespace())) {
                 results.add(child);
             }
         }
@@ -184,30 +184,6 @@ public class Element {
         return this.attributes;
     }
 
-    @NonNull
-    public String toString() {
-        final StringBuilder elementOutput = new StringBuilder();
-        if (content == null && children.isEmpty()) {
-            final Tag emptyTag = Tag.empty(name);
-            emptyTag.setAttributes(this.attributes);
-            elementOutput.append(emptyTag);
-        } else {
-            final Tag startTag = Tag.start(name);
-            startTag.setAttributes(this.attributes);
-            elementOutput.append(startTag);
-            if (content != null) {
-                elementOutput.append(XmlHelper.encodeEntities(content));
-            } else {
-                for (final Element child : children) {
-                    elementOutput.append(child.toString());
-                }
-            }
-            final Tag endTag = Tag.end(name);
-            elementOutput.append(endTag);
-        }
-        return elementOutput.toString();
-    }
-
     public final String getName() {
         return name;
     }
@@ -230,7 +206,7 @@ public class Element {
     }
 
     public String getNamespace() {
-        return getAttribute("xmlns");
+        return this.namespace;
     }
 
     protected Instant getAttributeAsInstant(final String name) {

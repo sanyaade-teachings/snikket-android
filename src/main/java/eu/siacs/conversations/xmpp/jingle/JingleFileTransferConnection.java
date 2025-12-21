@@ -511,10 +511,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                     xmppConnection, id, isInitiator(), useTor, useRelays, streamId, candidates);
         } else if (!useTor && transportInfo instanceof WebRTCDataChannelTransportInfo) {
             return new WebRTCDataChannelTransport(
-                    xmppConnectionService.getApplicationContext(),
-                    xmppConnection,
-                    id.account,
-                    isInitiator());
+                    xmppConnectionService.getApplicationContext(), xmppConnection, isInitiator());
         } else {
             throw new IllegalArgumentException("Do not know how to create transport");
         }
@@ -527,10 +524,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
         final boolean useRelays = appSettings.isUseRelays();
         if (!useTor && remoteHasFeature(Namespace.JINGLE_TRANSPORT_WEBRTC_DATA_CHANNEL)) {
             return new WebRTCDataChannelTransport(
-                    xmppConnectionService.getApplicationContext(),
-                    xmppConnection,
-                    id.account,
-                    isInitiator());
+                    xmppConnectionService.getApplicationContext(), xmppConnection, isInitiator());
         }
         // for connections we initialize we just don’t use S5B when 'use relays' is enabled
         // for outgoing connections we would have to reject (and not try) every connection that is

@@ -1838,7 +1838,7 @@ public class XmppConnection implements Runnable {
         // (because we would rather just do a normal SM/resume)
         final boolean mayAttemptBind = streamId == null || inlineStreamManagement;
         if (bind != null && mayAttemptBind) {
-            authenticate.addChild(generateBindRequest(bind));
+            authenticate.addExtension(generateBindRequest(bind));
         }
         if (inlineStreamManagement && streamId != null) {
             final var streamId = this.streamId.id;

@@ -78,6 +78,7 @@ import eu.siacs.conversations.xmpp.manager.RegistrationManager;
 import im.conversations.android.xmpp.Entity;
 import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.IqProcessingException;
+import im.conversations.android.xmpp.model.AuthenticationChallenge;
 import im.conversations.android.xmpp.model.AuthenticationFailure;
 import im.conversations.android.xmpp.model.AuthenticationRequest;
 import im.conversations.android.xmpp.model.AuthenticationStreamFeature;
@@ -100,6 +101,7 @@ import im.conversations.android.xmpp.model.sasl.SaslError;
 import im.conversations.android.xmpp.model.sasl.Success;
 import im.conversations.android.xmpp.model.sasl2.Authenticate;
 import im.conversations.android.xmpp.model.sasl2.Authentication;
+import im.conversations.android.xmpp.model.sasl2.Challenge;
 import im.conversations.android.xmpp.model.sasl2.UserAgent;
 import im.conversations.android.xmpp.model.session.Session;
 import im.conversations.android.xmpp.model.sm.Ack;
@@ -697,8 +699,13 @@ public class XmppConnection implements Runnable {
                 // two step sasl2 - we don’t support this yet
                 throw new StateChangingException(
                         Account.State.INCOMPATIBLE_CLIENT, "received 'continue'");
-            } else if (nextTag.isStart("challenge")) {
-                final Element challenge = tagReader.readElement(nextTag);
+            } else if (nextTag.isStart("challenge", Namespace.SASL)) {
+                final var challenge =
+                        tagReader.readElement(
+                                nextTag, im.conversations.android.xmpp.model.sasl.Challenge.class);
+                processChallenge(challenge);
+            } else if (nextTag.isStart("challenge", Namespace.SASL_2)) {
+                final var challenge = tagReader.readElement(nextTag, Challenge.class);
                 processChallenge(challenge);
             } else if (!LoginInfo.isSuccess(this.loginInfo)) {
                 throw new StateChangingException(
@@ -725,7 +732,7 @@ public class XmppConnection implements Runnable {
                 final var enabled = tagReader.readElement(nextTag, Enabled.class);
                 processEnabled(enabled);
             } else if (nextTag.isStart("r", Namespace.STREAM_MANAGEMENT)) {
-                tagReader.readElement(nextTag);
+                tagReader.readElement(nextTag, Request.class);
                 if (Config.EXTENDED_SM_LOGGING) {
                     Log.d(
                             Config.LOGTAG,
@@ -790,13 +797,13 @@ public class XmppConnection implements Runnable {
         }
     }
 
-    private void processChallenge(final Element challenge) throws IOException {
+    private void processChallenge(final AuthenticationChallenge challenge) throws IOException {
         final SaslMechanism.Version version;
         try {
             version = SaslMechanism.Version.of(challenge);
         } catch (final IllegalArgumentException e) {
             throw new StateChangingException(
-                    Account.State.INCOMPATIBLE_SERVER, "login challange of unknown type");
+                    Account.State.INCOMPATIBLE_SERVER, "login challenge of unknown type");
         }
         final StreamElement response;
         if (version == SaslMechanism.Version.SASL) {
@@ -841,7 +848,7 @@ public class XmppConnection implements Runnable {
             challenge = success.getContent();
             version = SaslMechanism.Version.SASL;
         } else if (element instanceof im.conversations.android.xmpp.model.sasl2.Success success) {
-            challenge = success.findChildContent("additional-data");
+            challenge = success.getAdditionalData();
             version = SaslMechanism.Version.SASL_2;
         } else {
             throw new StateChangingException(
@@ -1688,6 +1695,7 @@ public class XmppConnection implements Runnable {
             } else {
                 hashTokenRequest = null;
             }
+            // TODO get rid of Bind2 class and make this a method of 'inline'
             final Collection<String> bindFeatures = Bind2.features(inline);
             quickStartAvailable =
                     sm

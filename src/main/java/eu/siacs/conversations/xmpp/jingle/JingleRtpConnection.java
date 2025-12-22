@@ -41,7 +41,6 @@ import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Content;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Group;
 import eu.siacs.conversations.xmpp.jingle.stanzas.IceUdpTransportInfo;
-import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.jingle.stanzas.RtpDescription;
 import eu.siacs.conversations.xmpp.manager.ExternalServiceDiscoveryManager;
 import eu.siacs.conversations.xmpp.manager.JingleManager;
@@ -50,6 +49,7 @@ import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.jmi.Accept;
 import im.conversations.android.xmpp.model.jmi.Finish;
@@ -174,7 +174,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                 State.SESSION_ACCEPTED)) {
             // we might have already changed resources (full jid) at this point; so this might not
             // even reach the other party
-            sendSessionTerminate(Reason.CONNECTIVITY_ERROR);
+            sendSessionTerminate(new Reason.ConnectivityError());
         } else {
             transitionOrThrow(State.TERMINATED_CONNECTIVITY_ERROR);
             finish();
@@ -184,15 +184,15 @@ public class JingleRtpConnection extends AbstractJingleConnection
     private void receiveSessionTerminate(final Iq jinglePacket) {
         respondOk(jinglePacket);
         final var jingle = jinglePacket.getExtension(Jingle.class);
-        final Jingle.ReasonWrapper wrapper = jingle.getReason();
+        final var wrapper = jingle.getReason();
         final State previous = this.state;
         Log.d(
                 Config.LOGTAG,
                 id.account.getJid().asBareJid()
                         + ": received session terminate reason="
-                        + wrapper.reason
+                        + wrapper.reason()
                         + "("
-                        + Strings.nullToEmpty(wrapper.text)
+                        + Strings.nullToEmpty(wrapper.text())
                         + ") while in state "
                         + previous);
         if (TERMINATED.contains(previous)) {
@@ -204,7 +204,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
             return;
         }
         webRTCWrapper.close();
-        final State target = reasonToState(wrapper.reason);
+        final State target = reasonToState(wrapper.reason());
         transitionOrThrow(target);
         if ((previous == State.PROPOSED || previous == State.SESSION_INITIALIZED)
                 && isResponder()) {
@@ -338,7 +338,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
             respondOk(jinglePacket);
             this.webRTCWrapper.close();
             sendSessionTerminate(
-                    Reason.FAILED_APPLICATION,
+                    new Reason.FailedApplication(),
                     String.format(
                             "contents with names %s already exists",
                             Joiner.on(", ").join(modification.getNames())));
@@ -461,7 +461,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + ": unable to set remote description after receiving content-accept",
                     cause);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, cause.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), cause.getMessage());
             return;
         }
         Log.d(
@@ -497,7 +497,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                         currentOutgoing.modifiedSendersChecked(isInitiator, modification);
             } catch (final IllegalArgumentException e) {
                 webRTCWrapper.close();
-                sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+                sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
                 return;
             }
             this.outgoingContentAdd = modifiedContentMap;
@@ -514,7 +514,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                         remoteContentMap.modifiedSendersChecked(isInitiator, modification);
             } catch (final IllegalArgumentException e) {
                 webRTCWrapper.close();
-                sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+                sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
                 return;
             }
             final SessionDescription offer;
@@ -527,7 +527,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                                 + ": unable convert offer from content-modify to SDP",
                         e);
                 webRTCWrapper.close();
-                sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+                sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
                 return;
             }
             Log.d(
@@ -562,7 +562,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         } catch (final Exception e) {
             Log.d(Config.LOGTAG, "unable to accept content add", Throwables.getRootCause(e));
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION);
+            sendSessionTerminate(new Reason.FailedApplication());
         }
     }
 
@@ -633,7 +633,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + " content-reject",
                     cause);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, cause.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), cause.getMessage());
             return;
         }
         Log.d(
@@ -676,7 +676,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         } else {
             webRTCWrapper.close();
             sendSessionTerminate(
-                    Reason.FAILED_APPLICATION,
+                    new Reason.FailedApplication(),
                     String.format(
                             "%s only supports %s as a means to retract a not yet accepted %s",
                             BuildConfig.APP_NAME,
@@ -703,7 +703,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + " content-add",
                     cause);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, cause.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), cause.getMessage());
             return;
         }
         this.outgoingContentAdd = null;
@@ -825,7 +825,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + ": unable convert offer from content-add to SDP",
                     e);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
             return;
         }
         this.incomingContentAdd = null;
@@ -884,7 +884,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         } catch (final Exception e) {
             Log.d(Config.LOGTAG, "unable to accept content add", Throwables.getRootCause(e));
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION);
+            sendSessionTerminate(new Reason.FailedApplication());
         }
     }
 
@@ -1182,7 +1182,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                     "proposed media must be set when processing pre-approved session-initiate");
             if (!this.proposedMedia.equals(contentMap.getMedia())) {
                 sendSessionTerminate(
-                        Reason.SECURITY_ERROR,
+                        new Reason.SecurityError(),
                         String.format(
                                 "Your session proposal (Jingle Message Initiation) included media"
                                         + " %s but your session-initiate was %s",
@@ -1268,7 +1268,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         final Set<Media> initiatorMedia = this.initiatorRtpContentMap.getMedia();
         if (!initiatorMedia.equals(contentMap.getMedia())) {
             sendSessionTerminate(
-                    Reason.SECURITY_ERROR,
+                    new Reason.SecurityError(),
                     String.format(
                             "Your session-included included media %s but our session-initiate was"
                                     + " %s",
@@ -1304,7 +1304,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + ": unable convert offer from session-accept to SDP",
                     e);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
             return;
         }
         final org.webrtc.SessionDescription answer =
@@ -1320,7 +1320,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                     Throwables.getRootCause(e));
             webRTCWrapper.close();
             sendSessionTerminate(
-                    Reason.FAILED_APPLICATION, Throwables.getRootCause(e).getMessage());
+                    new Reason.FailedApplication(), Throwables.getRootCause(e).getMessage());
             return;
         }
         processCandidates(contentMap.contents.entrySet());
@@ -1341,7 +1341,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                             + ": unable convert offer from session-initiate to SDP",
                     e);
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
             return;
         }
         sendSessionAccept(rtpContentMap.getMedia(), offer);
@@ -1369,7 +1369,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         } catch (final WebRTCWrapper.InitializationException e) {
             Log.d(Config.LOGTAG, id.account.getJid().asBareJid() + ": unable to initialize WebRTC");
             webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, e.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), e.getMessage());
             return;
         }
         final org.webrtc.SessionDescription sdp =
@@ -2273,7 +2273,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         } else if (state == State.SESSION_INITIALIZED) {
             Log.e(Config.LOGTAG, id.account.getJid().asBareJid() + ": failed call integration");
             this.webRTCWrapper.close();
-            sendSessionTerminate(Reason.FAILED_APPLICATION, "CallIntegration failed");
+            sendSessionTerminate(new Reason.FailedApplication(), "CallIntegration failed");
         } else {
             throw new IllegalStateException(
                     String.format("Can not fail integration in state %s", state));
@@ -2304,7 +2304,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         if (isInitiator()
                 && isInState(State.SESSION_INITIALIZED, State.SESSION_INITIALIZED_PRE_APPROVED)) {
             this.webRTCWrapper.close();
-            sendSessionTerminate(Reason.CANCEL);
+            sendSessionTerminate(new Reason.Cancel());
             return;
         }
         if (isInState(State.SESSION_INITIALIZED)) {
@@ -2313,7 +2313,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         }
         if (isInState(State.SESSION_INITIALIZED_PRE_APPROVED, State.SESSION_ACCEPTED)) {
             this.webRTCWrapper.close();
-            sendSessionTerminate(Reason.SUCCESS);
+            sendSessionTerminate(new Reason.Success());
             return;
         }
         if (isInState(
@@ -2401,7 +2401,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     private void rejectCallFromSessionInitiate() {
         webRTCWrapper.close();
-        sendSessionTerminate(Reason.DECLINE);
+        sendSessionTerminate(new Reason.Decline());
         xmppConnectionService.getNotificationService().cancelIncomingCallNotification();
     }
 
@@ -2521,7 +2521,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                 return;
             }
             Log.d(Config.LOGTAG, "failed to renegotiate. sending session-terminate", cause);
-            sendSessionTerminate(Reason.FAILED_APPLICATION, cause.getMessage());
+            sendSessionTerminate(new Reason.FailedApplication(), cause.getMessage());
             return;
         }
         final RtpContentMap rtpContentMap = RtpContentMap.of(sessionDescription, isInitiator());
@@ -2540,7 +2540,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
         if (diff.hasModifications() && iceRestart) {
             webRTCWrapper.close();
             sendSessionTerminate(
-                    Reason.FAILED_APPLICATION,
+                    new Reason.FailedApplication(),
                     "WebRTC unexpectedly tried to modify content and transport at once");
             return;
         }
@@ -2700,7 +2700,7 @@ public class JingleRtpConnection extends AbstractJingleConnection
                                 + " Other party already did");
                 return;
             }
-            sendSessionTerminate(Reason.CONNECTIVITY_ERROR);
+            sendSessionTerminate(new Reason.ConnectivityError());
         }
     }
 

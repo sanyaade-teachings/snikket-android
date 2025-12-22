@@ -32,7 +32,6 @@ import eu.siacs.conversations.xmpp.jingle.stanzas.FileTransferDescription;
 import eu.siacs.conversations.xmpp.jingle.stanzas.GenericTransportInfo;
 import eu.siacs.conversations.xmpp.jingle.stanzas.IbbTransportInfo;
 import eu.siacs.conversations.xmpp.jingle.stanzas.IceUdpTransportInfo;
-import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.jingle.stanzas.SocksByteStreamsTransportInfo;
 import eu.siacs.conversations.xmpp.jingle.stanzas.WebRTCDataChannelTransportInfo;
 import eu.siacs.conversations.xmpp.jingle.transports.InbandBytestreamsTransport;
@@ -40,6 +39,7 @@ import eu.siacs.conversations.xmpp.jingle.transports.SocksByteStreamsTransport;
 import eu.siacs.conversations.xmpp.jingle.transports.Transport;
 import eu.siacs.conversations.xmpp.jingle.transports.WebRTCDataChannelTransport;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import java.io.Closeable;
 import java.io.EOFException;
@@ -278,7 +278,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                         "Transport in session accept did not match our session-initialize");
                 terminateTransport();
                 sendSessionTerminate(
-                        Reason.FAILED_APPLICATION,
+                        new Reason.FailedApplication(),
                         "Transport in session accept did not match our session-initialize");
             }
         } else {
@@ -575,15 +575,15 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
 
     private synchronized void receiveSessionTerminate(final Iq jinglePacket, final Jingle jingle) {
         respondOk(jinglePacket);
-        final Jingle.ReasonWrapper wrapper = jingle.getReason();
+        final var wrapper = jingle.getReason();
         final State previous = this.state;
         Log.d(
                 Config.LOGTAG,
                 id.account.getJid().asBareJid()
                         + ": received session terminate reason="
-                        + wrapper.reason
+                        + wrapper.reason()
                         + "("
-                        + Strings.nullToEmpty(wrapper.text)
+                        + Strings.nullToEmpty(wrapper.text())
                         + ") while in state "
                         + previous);
         if (TERMINATED.contains(previous)) {
@@ -596,10 +596,12 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
         }
         if (isInitiator()) {
             this.message.setErrorMessage(
-                    Strings.isNullOrEmpty(wrapper.text) ? wrapper.reason.toString() : wrapper.text);
+                    Strings.isNullOrEmpty(wrapper.text())
+                            ? wrapper.reason().getClass().getSimpleName()
+                            : wrapper.text());
         }
         terminateTransport();
-        final State target = reasonToState(wrapper.reason);
+        final State target = reasonToState(wrapper.reason());
         transitionOrThrow(target);
         finish();
     }
@@ -646,7 +648,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                     "Transport in transport-accept did not match our transport-replace");
             terminateTransport();
             sendSessionTerminate(
-                    Reason.FAILED_APPLICATION,
+                    new Reason.FailedApplication(),
                     "Transport in transport-accept did not match our transport-replace");
         }
     }
@@ -728,7 +730,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             if (!socksBytestreamsTransport.setCandidateUsed(candidateUsed.cid)) {
                 terminateTransport();
                 sendSessionTerminate(
-                        Reason.FAILED_TRANSPORT,
+                        new Reason.FailedTransport(),
                         String.format(
                                 "Peer is not connected to our candidate %s", candidateUsed.cid));
             }
@@ -925,7 +927,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             sendFileSessionInfoReceived();
             terminateTransport();
             messageReceivedSuccess();
-            sendSessionTerminate(Reason.SUCCESS, null);
+            sendSessionTerminate(new Reason.Success(), null);
         }
     }
 
@@ -965,7 +967,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
         } else {
             terminateTransport();
             Log.d(Config.LOGTAG, "on file transmission failed", throwable);
-            sendSessionTerminate(Reason.CONNECTIVITY_ERROR, null);
+            sendSessionTerminate(new Reason.ConnectivityError(), null);
         }
     }
 
@@ -1025,7 +1027,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 if (isTerminated()) {
                     return;
                 }
-                sendSessionTerminate(Reason.FAILED_APPLICATION, null);
+                sendSessionTerminate(new Reason.FailedApplication(), null);
             }
             return;
         }
@@ -1033,7 +1035,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
         final var isTransportInBand = transport instanceof InbandBytestreamsTransport;
         if (isTransportInBand) {
             terminateTransport();
-            sendSessionTerminate(Reason.CONNECTIVITY_ERROR, "Failed to setup IBB transport");
+            sendSessionTerminate(new Reason.ConnectivityError(), "Failed to setup IBB transport");
             return;
         }
         // terminate the current transport
@@ -1261,9 +1263,9 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
 
     private boolean stopFileTransfer() {
         if (isInitiator()) {
-            return stopFileTransfer(Reason.CANCEL);
+            return stopFileTransfer(new Reason.Cancel());
         } else {
-            return stopFileTransfer(Reason.DECLINE);
+            return stopFileTransfer(new Reason.Decline());
         }
     }
 
@@ -1273,7 +1275,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             // we change state before terminating transport so we don't consume the following
             // IOException and turn it into a connectivity error
 
-            if (isInitiator() && reason == Reason.CANCEL) {
+            if (isInitiator() && reason instanceof Reason.Cancel) {
                 // message hooks have already run so we need to mark to persist the 'cancelled'
                 // status
                 xmppConnectionService.markMessage(

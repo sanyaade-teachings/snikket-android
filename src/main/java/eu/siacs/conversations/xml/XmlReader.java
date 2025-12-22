@@ -77,7 +77,9 @@ public class XmlReader implements Closeable {
                 }
             }
 
-        } catch (Throwable throwable) {
+        } catch (final IOException e) {
+            throw e;
+        } catch (final Throwable throwable) {
             throw new IOException(
                     "xml parser mishandled "
                             + throwable.getClass().getSimpleName()

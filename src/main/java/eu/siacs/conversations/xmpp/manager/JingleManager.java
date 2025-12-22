@@ -37,7 +37,6 @@ import eu.siacs.conversations.xmpp.jingle.OngoingRtpSession;
 import eu.siacs.conversations.xmpp.jingle.RtpEndUserState;
 import eu.siacs.conversations.xmpp.jingle.stanzas.Content;
 import eu.siacs.conversations.xmpp.jingle.stanzas.GenericDescription;
-import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.jingle.stanzas.RtpDescription;
 import eu.siacs.conversations.xmpp.jingle.transports.InbandBytestreamsTransport;
 import eu.siacs.conversations.xmpp.jingle.transports.Transport;
@@ -45,6 +44,7 @@ import im.conversations.android.xmpp.IqProcessingException;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.ibb.InBandByteStream;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.jmi.Accept;
 import im.conversations.android.xmpp.model.jmi.JingleMessage;
@@ -449,7 +449,7 @@ public class JingleManager extends AbstractManager {
         iq.setTo(id.with);
         final var sessionTermination =
                 iq.addExtension(new Jingle(Jingle.Action.SESSION_TERMINATE, id.sessionId));
-        sessionTermination.setReason(Reason.BUSY, null);
+        sessionTermination.setReason(new Reason.Busy(), null);
         this.connection.sendIqPacket(iq);
     }
 

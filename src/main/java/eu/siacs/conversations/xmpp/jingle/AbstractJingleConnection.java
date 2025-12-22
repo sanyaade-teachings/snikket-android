@@ -17,12 +17,12 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.utils.CryptoHelper;
 import eu.siacs.conversations.xmpp.Jid;
-import eu.siacs.conversations.xmpp.jingle.stanzas.Reason;
 import eu.siacs.conversations.xmpp.manager.DiscoManager;
 import eu.siacs.conversations.xmpp.manager.JingleManager;
 import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import java.util.Arrays;
@@ -423,14 +423,17 @@ public abstract class AbstractJingleConnection {
         }
     }
 
-    protected static State reasonToState(Reason reason) {
+    protected static State reasonToState(final Reason reason) {
         return switch (reason) {
-            case SUCCESS -> State.TERMINATED_SUCCESS;
-            case DECLINE, BUSY -> State.TERMINATED_DECLINED_OR_BUSY;
-            case CANCEL, TIMEOUT -> State.TERMINATED_CANCEL_OR_TIMEOUT;
-            case SECURITY_ERROR -> State.TERMINATED_SECURITY_ERROR;
-            case FAILED_APPLICATION, UNSUPPORTED_TRANSPORTS, UNSUPPORTED_APPLICATIONS ->
-                    State.TERMINATED_APPLICATION_FAILURE;
+            case Reason.Success ignored -> State.TERMINATED_SUCCESS;
+            case Reason.Decline ignored -> State.TERMINATED_DECLINED_OR_BUSY;
+            case Reason.Busy ignored -> State.TERMINATED_DECLINED_OR_BUSY;
+            case Reason.Cancel ignored -> State.TERMINATED_CANCEL_OR_TIMEOUT;
+            case Reason.Timeout ignored -> State.TERMINATED_CANCEL_OR_TIMEOUT;
+            case Reason.SecurityError ignored -> State.TERMINATED_SECURITY_ERROR;
+            case Reason.FailedApplication ignored -> State.TERMINATED_APPLICATION_FAILURE;
+            case Reason.UnsupportedTransports ignored -> State.TERMINATED_APPLICATION_FAILURE;
+            case Reason.UnsupportedApplications ignored -> State.TERMINATED_APPLICATION_FAILURE;
             default -> State.TERMINATED_CONNECTIVITY_ERROR;
         };
     }

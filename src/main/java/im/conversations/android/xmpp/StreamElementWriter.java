@@ -20,11 +20,11 @@ public class StreamElementWriter extends BufferedWriter {
 
     private static final Map<Character, String> ENTITIES =
             new ImmutableMap.Builder<Character, String>()
-                    .put('"', "&quot;")
-                    .put('\'', "apos;")
-                    .put('<', "&lt;")
-                    .put('>', "&gt;")
-                    .put('&', "&amp;")
+                    .put('"', "quot")
+                    .put('\'', "apos")
+                    .put('<', "lt")
+                    .put('>', "gt")
+                    .put('&', "amp")
                     .build();
     private static final Collection<Character> ALLOWED_CONTROL_CHARS =
             Arrays.asList('\n', '\t', '\r');
@@ -104,7 +104,9 @@ public class StreamElementWriter extends BufferedWriter {
             } else {
                 final var entity = ENTITIES.get(c);
                 if (entity != null) {
+                    this.write('&');
                     this.write(entity);
+                    this.write(';');
                 } else {
                     this.write(c);
                 }

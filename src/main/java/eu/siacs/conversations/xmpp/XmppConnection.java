@@ -66,7 +66,6 @@ import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xml.Tag;
 import eu.siacs.conversations.xml.TagWriter;
 import eu.siacs.conversations.xml.XmlReader;
-import eu.siacs.conversations.xmpp.bind.Bind2;
 import eu.siacs.conversations.xmpp.manager.AbstractManager;
 import eu.siacs.conversations.xmpp.manager.BlockingManager;
 import eu.siacs.conversations.xmpp.manager.CarbonsManager;
@@ -1678,30 +1677,41 @@ public class XmppConnection implements Runnable {
             loginInfo = new LoginInfo(saslMechanism, version, Collections.emptyList());
         } else if (version == SaslMechanism.Version.SASL_2) {
             final Authentication authentication = (Authentication) authElement;
-            final var inline = authentication.getInline();
-            final boolean sm = inline != null && inline.hasExtension(StreamManagement.class);
             final HashedToken.Mechanism hashTokenRequest;
-            if (usingFast) {
-                hashTokenRequest = null;
-            } else if (inline != null) {
-                hashTokenRequest =
-                        HashedToken.Mechanism.best(
-                                inline.getFastMechanisms(), SSLSockets.version(this.socket));
-                // TODO warn or fail early if channel binding priority isn’t high enough compared to
-                // login mechanism
-                // ChannelBinding.priority(hashTokenRequest.channelBinding)
-                //                        <
-                // ChannelBindingMechanism.getPriority(saslMechanism)
+            final var inline = authentication.getInline();
+            final boolean inlineStreamManagement;
+            final Optional<Collection<String>> inlineBind;
+            if (inline != null) {
+                inlineStreamManagement = inline.hasExtension(StreamManagement.class);
+                final var bind2 = inline.getExtension(Bind.class);
+                if (bind2 != null) {
+                    inlineBind = Optional.of(bind2.getInlineFeatures());
+                } else {
+                    inlineBind = Optional.absent();
+                }
+                if (usingFast) {
+                    hashTokenRequest = null;
+                } else {
+                    hashTokenRequest =
+                            HashedToken.Mechanism.best(
+                                    inline.getFastMechanisms(), SSLSockets.version(this.socket));
+                    // TODO warn or fail early if channel binding priority isn’t high enough
+                    // compared to
+                    // login mechanism
+                    // ChannelBinding.priority(hashTokenRequest.channelBinding)
+                    //                        <
+                    // ChannelBindingMechanism.getPriority(saslMechanism)
+                }
             } else {
                 hashTokenRequest = null;
+                inlineStreamManagement = false;
+                inlineBind = Optional.absent();
             }
-            // TODO get rid of Bind2 class and make this a method of 'inline'
-            final Collection<String> bindFeatures = Bind2.features(inline);
             quickStartAvailable =
-                    sm
-                            && bindFeatures != null
-                            && bindFeatures.containsAll(Bind2.QUICKSTART_FEATURES);
-            if (bindFeatures != null) {
+                    inlineStreamManagement
+                            && inlineBind.isPresent()
+                            && inlineBind.get().containsAll(Bind.QUICKSTART_FEATURES);
+            if (inlineBind.isPresent()) {
                 try {
                     mXmppConnectionService.restoredFromDatabaseLatch.await();
                 } catch (final InterruptedException e) {
@@ -1713,11 +1723,16 @@ public class XmppConnection implements Runnable {
                     return;
                 }
             }
-            loginInfo = new LoginInfo(saslMechanism, version, bindFeatures);
+            loginInfo =
+                    new LoginInfo(saslMechanism, version, inlineBind.or(Collections.emptyList()));
             this.hashTokenRequest = hashTokenRequest;
             authenticate =
                     generateAuthenticationRequest(
-                            firstMessage, usingFast, hashTokenRequest, bindFeatures, sm);
+                            firstMessage,
+                            usingFast,
+                            hashTokenRequest,
+                            inlineBind.orNull(),
+                            inlineStreamManagement);
         } else {
             throw new AssertionError("Missing implementation for " + version);
         }
@@ -1814,14 +1829,14 @@ public class XmppConnection implements Runnable {
     private AuthenticationRequest generateAuthenticationRequest(
             final String firstMessage, final boolean usingFast) {
         return generateAuthenticationRequest(
-                firstMessage, usingFast, null, Bind2.QUICKSTART_FEATURES, true);
+                firstMessage, usingFast, null, Bind.QUICKSTART_FEATURES, true);
     }
 
     private AuthenticationRequest generateAuthenticationRequest(
             final String firstMessage,
             final boolean usingFast,
             final HashedToken.Mechanism hashedTokenRequest,
-            final Collection<String> bind,
+            @org.jspecify.annotations.Nullable final Collection<String> bind,
             final boolean inlineStreamManagement) {
         final var authenticate = new Authenticate();
         if (!Strings.isNullOrEmpty(firstMessage)) {
@@ -2385,7 +2400,7 @@ public class XmppConnection implements Runnable {
                     new LoginInfo(
                             quickStartMechanism,
                             SaslMechanism.Version.SASL_2,
-                            Bind2.QUICKSTART_FEATURES);
+                            Bind.QUICKSTART_FEATURES);
             final boolean usingFast = quickStartMechanism instanceof HashedToken;
             final AuthenticationRequest authenticate =
                     generateAuthenticationRequest(
@@ -2889,10 +2904,7 @@ public class XmppConnection implements Runnable {
             Preconditions.checkNotNull(saslVersion, "SASL version must not be null");
             this.saslMechanism = saslMechanism;
             this.saslVersion = saslVersion;
-            this.inlineBindFeatures =
-                    inlineBindFeatures == null
-                            ? Collections.emptyList()
-                            : ImmutableList.copyOf(inlineBindFeatures);
+            this.inlineBindFeatures = ImmutableList.copyOf(inlineBindFeatures);
         }
 
         public static SaslMechanism mechanism(final LoginInfo loginInfo) {

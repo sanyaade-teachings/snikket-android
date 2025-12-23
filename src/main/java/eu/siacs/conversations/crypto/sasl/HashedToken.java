@@ -1,12 +1,10 @@
 package eu.siacs.conversations.crypto.sasl;
 
-import android.util.Base64;
 import android.util.Log;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.hash.HashFunction;
-import com.google.common.io.BaseEncoding;
 import com.google.common.primitives.Bytes;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.entities.Account;
@@ -38,18 +36,16 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
     }
 
     @Override
-    public String getClientFirstMessage(final SSLSocket sslSocket) {
+    public byte[] getClientFirstMessage(final SSLSocket sslSocket) {
         final String token = Strings.nullToEmpty(this.account.getFastToken());
         final HashFunction hashing = getHashFunction(token.getBytes(StandardCharsets.UTF_8));
         final byte[] cbData = getChannelBindingData(sslSocket);
         final byte[] initiatorHashedToken =
                 hashing.hashBytes(Bytes.concat(INITIATOR, cbData)).asBytes();
-        final byte[] firstMessage =
-                Bytes.concat(
-                        account.getUsername().getBytes(StandardCharsets.UTF_8),
-                        new byte[] {0x00},
-                        initiatorHashedToken);
-        return Base64.encodeToString(firstMessage, Base64.NO_WRAP);
+        return Bytes.concat(
+                account.getUsername().getBytes(StandardCharsets.UTF_8),
+                new byte[] {0x00},
+                initiatorHashedToken);
     }
 
     private byte[] getChannelBindingData(final SSLSocket sslSocket) {
@@ -70,14 +66,8 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
     }
 
     @Override
-    public String getResponse(final String challenge, final SSLSocket socket)
+    public byte[] getResponse(final byte[] challenge, final SSLSocket socket)
             throws AuthenticationException {
-        final byte[] responderMessage;
-        try {
-            responderMessage = BaseEncoding.base64().decode(challenge);
-        } catch (final Exception e) {
-            throw new AuthenticationException("Unable to decode responder message", e);
-        }
         final String token = Strings.nullToEmpty(this.account.getFastToken());
         final HashFunction hashing = getHashFunction(token.getBytes(StandardCharsets.UTF_8));
         final byte[] cbData = getChannelBindingData(socket);
@@ -86,8 +76,8 @@ public abstract class HashedToken extends SaslMechanism implements ChannelBindin
         // TODO handle the 0x00 prefix for success responses
         // we know the length of the hmac and if the response is exactly one byte longer and is 00
         // then it's fine
-        if (Arrays.equals(responderMessage, expectedResponderMessage)) {
-            return null;
+        if (Arrays.equals(challenge, expectedResponderMessage)) {
+            return new byte[0];
         }
         throw new AuthenticationException("Responder message did not match");
     }

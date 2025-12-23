@@ -80,6 +80,7 @@ import im.conversations.android.xmpp.IqProcessingException;
 import im.conversations.android.xmpp.model.AuthenticationChallenge;
 import im.conversations.android.xmpp.model.AuthenticationFailure;
 import im.conversations.android.xmpp.model.AuthenticationRequest;
+import im.conversations.android.xmpp.model.AuthenticationResponse;
 import im.conversations.android.xmpp.model.AuthenticationStreamFeature;
 import im.conversations.android.xmpp.model.Extension;
 import im.conversations.android.xmpp.model.StreamElement;
@@ -804,7 +805,7 @@ public class XmppConnection implements Runnable {
             throw new StateChangingException(
                     Account.State.INCOMPATIBLE_SERVER, "login challenge of unknown type");
         }
-        final StreamElement response;
+        final AuthenticationResponse response;
         if (version == SaslMechanism.Version.SASL) {
             response = new Response();
         } else if (version == SaslMechanism.Version.SASL_2) {
@@ -818,13 +819,22 @@ public class XmppConnection implements Runnable {
                     Account.State.INCOMPATIBLE_SERVER,
                     "server sent challenge even though login was not started or already complete");
         }
+        final byte[] challengeAsBytes;
         try {
-            response.setContent(
+            challengeAsBytes = challenge.asBytes();
+        } catch (final IllegalStateException e) {
+            // TODO send auth abort
+            Log.d(Config.LOGTAG, "invalid base64 in SASL challenge", e);
+            throw new StateChangingException(Account.State.UNAUTHORIZED);
+        }
+        try {
+            final var message =
                     currentLoginInfo.saslMechanism.getResponse(
-                            challenge.getContent(), sslSocketOrNull(socket)));
+                            challengeAsBytes, sslSocketOrNull(socket));
+            response.setContent(message);
         } catch (final SaslMechanism.AuthenticationException e) {
-            // TODO: Send auth abort tag.
-            Log.e(Config.LOGTAG, e.toString());
+            // TODO send auth abort
+            Log.e(Config.LOGTAG, "could not process SASL challenge", e);
             throw new StateChangingException(Account.State.UNAUTHORIZED);
         }
         tagWriter.writeElement(response);
@@ -842,12 +852,22 @@ public class XmppConnection implements Runnable {
                     "received login success even though login was not started or already complete");
         }
         final SaslMechanism.Version version;
-        final String challenge;
+        final byte[] challenge;
         if (element instanceof Success success) {
-            challenge = success.getContent();
+            try {
+                challenge = success.asBytes();
+            } catch (final IllegalStateException e) {
+                throw new StateChangingException(
+                        Account.State.INCOMPATIBLE_SERVER, "invalid base64 in SASL success");
+            }
             version = SaslMechanism.Version.SASL;
         } else if (element instanceof im.conversations.android.xmpp.model.sasl2.Success success) {
-            challenge = success.getAdditionalData();
+            try {
+                challenge = success.getAdditionalData();
+            } catch (final IllegalStateException e) {
+                throw new StateChangingException(
+                        Account.State.INCOMPATIBLE_SERVER, "invalid base64 in SASL2 success");
+            }
             version = SaslMechanism.Version.SASL_2;
         } else {
             throw new StateChangingException(
@@ -1663,17 +1683,18 @@ public class XmppConnection implements Runnable {
             scramMechanism.setDowngradeProtection(downgradeProtection);
         }
         final boolean quickStartAvailable;
-        final String firstMessage =
+        final byte[] firstMessage =
                 saslMechanism.getClientFirstMessage(sslSocketOrNull(this.socket));
         final boolean usingFast = SaslMechanism.hashedToken(saslMechanism);
         final AuthenticationRequest authenticate;
         final LoginInfo loginInfo;
         if (version == SaslMechanism.Version.SASL) {
-            authenticate = new Auth();
-            if (!Strings.isNullOrEmpty(firstMessage)) {
-                authenticate.setContent(firstMessage);
+            final var auth = new Auth();
+            if (firstMessage.length != 0) {
+                auth.setContent(firstMessage);
             }
             quickStartAvailable = false;
+            authenticate = auth;
             loginInfo = new LoginInfo(saslMechanism, version, Collections.emptyList());
         } else if (version == SaslMechanism.Version.SASL_2) {
             final Authentication authentication = (Authentication) authElement;
@@ -1827,20 +1848,20 @@ public class XmppConnection implements Runnable {
     }
 
     private AuthenticationRequest generateAuthenticationRequest(
-            final String firstMessage, final boolean usingFast) {
+            final byte[] firstMessage, final boolean usingFast) {
         return generateAuthenticationRequest(
                 firstMessage, usingFast, null, Bind.QUICKSTART_FEATURES, true);
     }
 
     private AuthenticationRequest generateAuthenticationRequest(
-            final String firstMessage,
+            final byte[] firstMessage,
             final boolean usingFast,
             final HashedToken.Mechanism hashedTokenRequest,
             @org.jspecify.annotations.Nullable final Collection<String> bind,
             final boolean inlineStreamManagement) {
         final var authenticate = new Authenticate();
-        if (!Strings.isNullOrEmpty(firstMessage)) {
-            authenticate.addChild("initial-response").setContent(firstMessage);
+        if (firstMessage.length != 0) {
+            authenticate.setInitialResponse(firstMessage);
         }
         final var userAgent =
                 authenticate.addExtension(
@@ -2911,13 +2932,13 @@ public class XmppConnection implements Runnable {
             return loginInfo == null ? null : loginInfo.saslMechanism;
         }
 
-        public void success(final String challenge, final SSLSocket sslSocket)
+        public void success(final byte[] challenge, final SSLSocket sslSocket)
                 throws SaslMechanism.AuthenticationException {
             if (Thread.currentThread().isInterrupted()) {
                 throw new SaslMechanism.AuthenticationException("Race condition during auth");
             }
             final var response = this.saslMechanism.getResponse(challenge, sslSocket);
-            if (!Strings.isNullOrEmpty(response)) {
+            if (response.length != 0) {
                 throw new SaslMechanism.AuthenticationException(
                         "processing success yielded another response");
             }

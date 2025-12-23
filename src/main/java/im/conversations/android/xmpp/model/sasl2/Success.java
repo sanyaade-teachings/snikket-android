@@ -19,8 +19,8 @@ public class Success extends StreamElement {
         return id.get();
     }
 
-    public String getAdditionalData() {
+    public byte[] getAdditionalData() {
         final var additionalData = getOnlyExtension(AdditionalData.class);
-        return additionalData == null ? null : additionalData.getContent();
+        return additionalData == null ? new byte[0] : additionalData.asBytes();
     }
 }

@@ -29,8 +29,12 @@
 
 package eu.siacs.conversations.utils;
 
-import android.util.LruCache;
 import androidx.annotation.NonNull;
+import com.google.common.base.Joiner;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -58,6 +62,7 @@ public class Emoticons {
     private static final UnicodeBlocks ARROWS =
             new UnicodeBlocks(new UnicodeRange(0x2194, 0x2199), new UnicodeList(0x21A9, 0x21AA));
     private static final UnicodeRange MISC_TECHNICAL = new UnicodeRange(0x2300, 0x23FF);
+    private static final UnicodeList SQUARES = new UnicodeList(0x2b1b, 0x2b1c);
     private static final UnicodeRange TAGS = new UnicodeRange(0xE0020, 0xE007F);
     private static final UnicodeList CYK_SYMBOLS_AND_PUNCTUATION = new UnicodeList(0x3030, 0x303D);
     private static final UnicodeList LETTER_LIKE_SYMBOLS = new UnicodeList(0x2122, 0x2139);
@@ -84,7 +89,8 @@ public class Emoticons {
                     ENCLOSED_ALPHANUMERIC_SUPPLEMENT,
                     ENCLOSED_IDEOGRAPHIC_SUPPLEMENT,
                     ARROWS,
-                    MISC_TECHNICAL);
+                    MISC_TECHNICAL,
+                    SQUARES);
 
     private static final int MAX_EMOJIS = 42;
 
@@ -134,7 +140,16 @@ public class Emoticons {
                     "⬆",
                     "⬇");
 
-    private static final LruCache<CharSequence, Pattern> CACHE = new LruCache<>(256);
+    private static final LoadingCache<CharSequence, Pattern> CACHE =
+            CacheBuilder.newBuilder()
+                    .maximumSize(256)
+                    .build(
+                            new CacheLoader<>() {
+                                @Override
+                                public Pattern load(final CharSequence key) {
+                                    return generatePattern(key);
+                                }
+                            });
 
     public static String normalizeToVS16(final String input) {
         return TEXT_DEFAULT_TO_VS16.contains(input) && !input.endsWith(VARIATION_15_STRING)
@@ -176,15 +191,10 @@ public class Emoticons {
     }
 
     public static Pattern getEmojiPattern(final CharSequence input) {
-        Pattern pattern = CACHE.get(input);
-        if (pattern == null) {
-            pattern = generatePattern(input);
-            CACHE.put(input, pattern);
-        }
-        return pattern;
+        return CACHE.getUnchecked(input);
     }
 
-    private static Pattern generatePattern(CharSequence input) {
+    private static Pattern generatePattern(final CharSequence input) {
         final HashSet<String> emojis = new HashSet<>();
         int i = 0;
         for (final Symbol symbol : parse(input.toString())) {
@@ -195,14 +205,7 @@ public class Emoticons {
                 }
             }
         }
-        final StringBuilder pattern = new StringBuilder();
-        for (String emoji : emojis) {
-            if (pattern.length() != 0) {
-                pattern.append('|');
-            }
-            pattern.append(Pattern.quote(emoji));
-        }
-        return Pattern.compile(pattern.toString());
+        return Pattern.compile(Joiner.on('|').join(Collections2.transform(emojis, Pattern::quote)));
     }
 
     public static boolean isEmoji(String input) {

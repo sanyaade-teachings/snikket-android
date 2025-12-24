@@ -202,7 +202,13 @@ public class DiscoManager extends AbstractManager {
                     }
 
                     final var caps = EntityCapabilities.hash(infoQuery);
-                    final var caps2 = EntityCapabilities2.hash(infoQuery);
+                    final EntityCapabilities2.EntityCaps2Hash caps2;
+                    try {
+                        caps2 = EntityCapabilities2.hash(infoQuery);
+                    } catch (final EntityCapabilities2.IllegalInfoQueryException e) {
+                        Log.d(Config.LOGTAG, "skipping caching of caps hash", e);
+                        return infoQuery;
+                    }
                     if (hash instanceof EntityCapabilities.EntityCapsHash) {
                         checkMatch(
                                 (EntityCapabilities.EntityCapsHash) hash,

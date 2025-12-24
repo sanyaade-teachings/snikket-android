@@ -846,16 +846,10 @@ public class MultiUserChatManager extends AbstractManager {
             final InfoQuery rawinfoQuery,
             final MucConfigSummary previousMucConfig) {
         final var infoQuery = clean(rawinfoQuery);
-        final var caps = EntityCapabilities.hash(infoQuery);
-        final var caps2 = EntityCapabilities2.hash(infoQuery);
         final var account = conversation.getAccount();
         final var address = conversation.getAddress().asBareJid();
-        getDatabase().insertCapsCache(caps, caps2, infoQuery);
         final MucOptions mucOptions = getOrCreateState(conversation);
-        if (mucOptions.setCaps2Hash(caps2.encoded())) {
-            Log.d(Config.LOGTAG, "caps hash has changed. persisting");
-            getDatabase().updateConversation(conversation);
-        }
+        persistInfoQuery(mucOptions, infoQuery);
         final var avatarHash =
                 infoQuery.getServiceDiscoveryExtension(
                         Namespace.MUC_ROOM_INFO, "muc#roominfo_avatarhash");
@@ -901,6 +895,21 @@ public class MultiUserChatManager extends AbstractManager {
         Log.d(Config.LOGTAG, "emoji restrictions: " + mucOptions.getReactionsRestrictions());
 
         return null;
+    }
+
+    private void persistInfoQuery(final MucOptions mucOptions, final InfoQuery infoQuery) {
+        final var caps = EntityCapabilities.hash(infoQuery);
+        final EntityCapabilities2.EntityCaps2Hash caps2;
+        try {
+            caps2 = EntityCapabilities2.hash(infoQuery);
+        } catch (final EntityCapabilities2.IllegalInfoQueryException e) {
+            return;
+        }
+        getDatabase().insertCapsCache(caps, caps2, infoQuery);
+        if (mucOptions.setCaps2Hash(caps2.encoded())) {
+            Log.d(Config.LOGTAG, "caps hash has changed. persisting");
+            getDatabase().updateConversation(mucOptions.getConversation());
+        }
     }
 
     private static InfoQuery clean(final InfoQuery input) {

@@ -1,8 +1,6 @@
 package im.conversations.android.xmpp;
 
 import android.util.Log;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.xml.Element;
 import im.conversations.android.xmpp.model.Extension;
@@ -44,34 +42,5 @@ public final class ExtensionFactory {
 
     private ExtensionFactory() {}
 
-    public static class Id {
-        public final String name;
-        public final String namespace;
-
-        public Id(String name, String namespace) {
-            this.name = name;
-            this.namespace = namespace;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Id id = (Id) o;
-            return Objects.equal(name, id.name) && Objects.equal(namespace, id.namespace);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hashCode(name, namespace);
-        }
-
-        @Override
-        public String toString() {
-            return MoreObjects.toStringHelper(this)
-                    .add("name", name)
-                    .add("namespace", namespace)
-                    .toString();
-        }
-    }
+    public record Id(String name, String namespace) {}
 }

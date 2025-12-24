@@ -10,7 +10,7 @@ import java.util.Collection;
 public class Extension extends Element {
 
     private Extension(final ExtensionFactory.Id id) {
-        super(id.name, id.namespace);
+        super(id.name(), id.namespace());
     }
 
     public Extension(final Class<? extends Extension> clazz) {

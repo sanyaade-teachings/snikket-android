@@ -27,7 +27,7 @@ public class Fallback extends Extension {
                     String.format("%s is not a registered extension", extension.getName()));
         }
         for (final var fallback : message.getExtensions(Fallback.class)) {
-            if (id.namespace.equals(fallback.getFor())) {
+            if (id.namespace().equals(fallback.getFor())) {
                 if (fallback.isNoChildren()) {
                     return Optional.of(new FullRange());
                 }

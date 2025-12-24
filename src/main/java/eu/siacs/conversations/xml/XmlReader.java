@@ -6,9 +6,11 @@ import eu.siacs.conversations.Config;
 import im.conversations.android.xmpp.ExtensionFactory;
 import im.conversations.android.xmpp.model.StreamElement;
 import java.io.Closeable;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import org.jspecify.annotations.NonNull;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -25,7 +27,7 @@ public class XmlReader implements Closeable {
         }
     }
 
-    public void setInputStream(InputStream inputStream) throws IOException {
+    public void setInputStream(final InputStream inputStream) throws IOException {
         if (inputStream == null) {
             throw new IOException();
         }
@@ -53,7 +55,7 @@ public class XmlReader implements Closeable {
         this.is = null;
     }
 
-    public Tag readTag() throws IOException {
+    public @NonNull Tag readTag() throws IOException {
         try {
             while (this.is != null && parser.next() != XmlPullParser.END_DOCUMENT) {
                 if (parser.getEventType() == XmlPullParser.START_TAG) {
@@ -88,7 +90,7 @@ public class XmlReader implements Closeable {
                             + ")",
                     throwable);
         }
-        return null;
+        throw new EOFException();
     }
 
     public <T extends StreamElement> T readElement(final Tag current, final Class<T> clazz)

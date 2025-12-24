@@ -6,8 +6,10 @@ import eu.siacs.conversations.Config;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xml.Tag;
+import im.conversations.android.xmpp.model.Extension;
 import im.conversations.android.xmpp.model.StreamElement;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -112,5 +114,13 @@ public class StreamElementWriter extends BufferedWriter {
                 }
             }
         }
+    }
+
+    public static String asString(final Extension extension) throws IOException {
+        final var outputStream = new ByteArrayOutputStream();
+        final var writer = new StreamElementWriter(outputStream);
+        writer.write(extension, Namespace.JABBER_CLIENT);
+        writer.flush();
+        return outputStream.toString();
     }
 }

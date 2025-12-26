@@ -135,6 +135,7 @@ import eu.siacs.conversations.xmpp.manager.RosterManager;
 import eu.siacs.conversations.xmpp.manager.VCardManager;
 import im.conversations.android.model.Bookmark;
 import im.conversations.android.model.ImmutableBookmark;
+import im.conversations.android.xmpp.model.delay.Delay;
 import im.conversations.android.xmpp.model.muc.Affiliation;
 import im.conversations.android.xmpp.model.muc.Role;
 import im.conversations.android.xmpp.model.stanza.Iq;
@@ -142,6 +143,7 @@ import im.conversations.android.xmpp.model.up.Push;
 import java.io.File;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1720,7 +1722,7 @@ public class XmppConnectionService extends Service {
         }
         if (packet != null) {
             if (delay) {
-                mMessageGenerator.addDelay(packet, message.getTimeSent());
+                packet.addExtension(new Delay(Instant.ofEpochMilli(message.getTimeSent())));
             }
             final var chatStateManager =
                     account.getXmppConnection().getManager(ChatStateManager.class);

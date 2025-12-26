@@ -123,4 +123,12 @@ public class StreamElementWriter extends BufferedWriter {
         writer.flush();
         return outputStream.toString();
     }
+
+    public static String asStringUnchecked(final Extension extension) {
+        try {
+            return asString(extension);
+        } catch (final IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 }

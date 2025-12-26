@@ -8,17 +8,12 @@ import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
-import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
 import im.conversations.android.xmpp.model.correction.Replace;
 import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.markers.Markable;
 import im.conversations.android.xmpp.model.unique.OriginId;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-import java.util.TimeZone;
 
 public class MessageGenerator extends AbstractGenerator {
     private static final String OMEMO_FALLBACK_MESSAGE =
@@ -67,16 +62,6 @@ public class MessageGenerator extends AbstractGenerator {
             packet.addExtension(new Replace(message.getEditedIdWireFormat()));
         }
         return packet;
-    }
-
-    public void addDelay(
-            im.conversations.android.xmpp.model.stanza.Message packet, long timestamp) {
-        final SimpleDateFormat mDateFormat =
-                new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
-        mDateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-        Element delay = packet.addChild("delay", "urn:xmpp:delay");
-        Date date = new Date(timestamp);
-        delay.setAttribute("stamp", mDateFormat.format(date));
     }
 
     public im.conversations.android.xmpp.model.stanza.Message generateAxolotlChat(

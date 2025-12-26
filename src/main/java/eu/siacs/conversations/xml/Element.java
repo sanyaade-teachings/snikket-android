@@ -17,7 +17,7 @@ public class Element {
     private final String name;
     private final String namespace;
 
-    private Hashtable<String, String> attributes = new Hashtable<>();
+    protected Hashtable<String, String> attributes = new Hashtable<>();
     private String content;
     protected List<Element> children = new ArrayList<>();
 
@@ -131,7 +131,7 @@ public class Element {
         return this;
     }
 
-    public Element setAttribute(String name, Jid value) {
+    public Element setAttribute(final String name, final Jid value) {
         if (name != null && value != null) {
             this.attributes.put(name, value.toString());
         }

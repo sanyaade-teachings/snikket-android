@@ -1,6 +1,7 @@
 package eu.siacs.conversations.crypto.sasl;
 
 import com.google.common.base.Preconditions;
+import com.google.common.io.BaseEncoding;
 import eu.siacs.conversations.entities.Account;
 import javax.net.ssl.SSLSocket;
 
@@ -30,9 +31,13 @@ public class Plain extends SaslMechanism {
         return getMessage(account.getUsername(), account.getPassword());
     }
 
-    public static byte[] getMessage(final String username, final String password) {
+    private static byte[] getMessage(final String username, final String password) {
         final String message = '\u0000' + username + '\u0000' + password;
         return message.getBytes();
+    }
+
+    public static String getAuthorization(final String username, final String password) {
+        return BaseEncoding.base64().encode(getMessage(username, password));
     }
 
     @Override

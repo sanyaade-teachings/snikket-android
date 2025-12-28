@@ -2,6 +2,7 @@ package eu.siacs.conversations.xml;
 
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Optional;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -12,8 +13,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class Element {
+
+    private static final Pattern ELEMENT_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_.-]+$");
+
     private final String name;
     private final String namespace;
 
@@ -38,20 +43,19 @@ public class Element {
     }
 
     public Element addChild(final String name) {
-        this.content = null;
-        Element child = new Element(name, this.namespace);
-        children.add(child);
-        return child;
+        return addChild(name, null);
     }
 
     public Element addChild(final String name, final String xmlns) {
+        Preconditions.checkArgument(
+                ELEMENT_NAME_PATTERN.matcher(name).matches(), "Invalid element name");
         this.content = null;
         Element child = new Element(name, xmlns);
         children.add(child);
         return child;
     }
 
-    public Element setContent(String content) {
+    public Element setContent(final String content) {
         this.content = content;
         this.children.clear();
         return this;

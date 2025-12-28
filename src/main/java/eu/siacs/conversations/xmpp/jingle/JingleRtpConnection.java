@@ -47,12 +47,10 @@ import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.JingleMessageManager;
 import im.conversations.android.xmpp.IqErrorException;
 import im.conversations.android.xmpp.model.error.Condition;
-import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.jingle.Jingle;
 import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.jingle.error.JingleCondition;
 import im.conversations.android.xmpp.model.jmi.Accept;
-import im.conversations.android.xmpp.model.jmi.Finish;
 import im.conversations.android.xmpp.model.jmi.JingleMessage;
 import im.conversations.android.xmpp.model.jmi.Proceed;
 import im.conversations.android.xmpp.model.jmi.Propose;
@@ -2005,7 +2003,10 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     protected void sendSessionTerminate(final Reason reason, final String text) {
         sendSessionTerminate(reason, text, this::writeLogMessage);
-        sendJingleMessageFinish(reason);
+        id.account
+                .getXmppConnection()
+                .getManager(JingleMessageManager.class)
+                .finish(id.with, id.sessionId, reason);
     }
 
     private void sendTransportInfo(
@@ -2403,12 +2404,6 @@ public class JingleRtpConnection extends AbstractJingleConnection
         webRTCWrapper.close();
         sendSessionTerminate(new Reason.Decline());
         xmppConnectionService.getNotificationService().cancelIncomingCallNotification();
-    }
-
-    private void sendJingleMessageFinish(final Reason reason) {
-        final var account = id.getAccount();
-        final var messagePacket = sessionFinish(id.with, id.sessionId, reason);
-        this.id.account.getXmppConnection().sendMessagePacket(messagePacket);
     }
 
     private boolean isOmemoEnabled() {
@@ -2981,19 +2976,5 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     private interface OnIceServersDiscovered {
         void onIceServersDiscovered(Collection<PeerConnection.IceServer> iceServers);
-    }
-
-    private static im.conversations.android.xmpp.model.stanza.Message sessionFinish(
-            final Jid with, final String sessionId, final Reason reason) {
-        final im.conversations.android.xmpp.model.stanza.Message packet =
-                new im.conversations.android.xmpp.model.stanza.Message();
-        packet.setType(im.conversations.android.xmpp.model.stanza.Message.Type.CHAT);
-        packet.setTo(with);
-        final var finish = packet.addExtension(new Finish());
-        finish.setAttribute("id", sessionId);
-        final Element reasonElement = finish.addChild("reason", Namespace.JINGLE);
-        reasonElement.addChild(reason.toString());
-        packet.addExtension(new Store());
-        return packet;
     }
 }

@@ -13,6 +13,8 @@ import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
 import eu.siacs.conversations.xmpp.jingle.Media;
 import im.conversations.android.xmpp.model.hints.Store;
+import im.conversations.android.xmpp.model.jingle.Jingle;
+import im.conversations.android.xmpp.model.jingle.Reason;
 import im.conversations.android.xmpp.model.jingle.apps.rtp.Description;
 import im.conversations.android.xmpp.model.jmi.Accept;
 import im.conversations.android.xmpp.model.jmi.Device;
@@ -221,6 +223,17 @@ public class JingleMessageManager extends AbstractManager {
             final var device = proceed.addExtension(new Device());
             device.setId(deviceId);
         }
+        packet.addExtension(new Store());
+        this.connection.sendMessagePacket(packet);
+    }
+
+    public void finish(final Jid with, final String sessionId, final Reason reason) {
+        final var packet = new Message();
+        packet.setType(Message.Type.CHAT);
+        packet.setTo(with);
+        final var finish = packet.addExtension(new Finish(sessionId));
+        final var wrapper = finish.addExtension(new Jingle.Reason());
+        wrapper.addExtension(reason);
         packet.addExtension(new Store());
         this.connection.sendMessagePacket(packet);
     }

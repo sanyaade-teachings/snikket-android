@@ -54,12 +54,7 @@ public class Jingle extends Extension {
         final var wrapper = this.addExtension(new Reason());
         wrapper.addExtension(reason);
         if (text != null) {
-            wrapper.addExtension(new Text());
-        }
-        final Element reasonElement = this.addChild("reason");
-        reasonElement.addChild(reason.toString());
-        if (!Strings.isNullOrEmpty(text)) {
-            reasonElement.addChild("text").setContent(text);
+            wrapper.addExtension(new Text(text));
         }
     }
 

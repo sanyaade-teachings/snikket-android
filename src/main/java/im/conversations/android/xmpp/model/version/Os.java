@@ -4,14 +4,14 @@ import im.conversations.android.annotation.XmlElement;
 import im.conversations.android.xmpp.model.Extension;
 
 @XmlElement
-public class Version extends Extension {
+public class Os extends Extension {
 
-    public Version() {
-        super(Version.class);
+    public Os() {
+        super(Os.class);
     }
 
-    public Version(final String version) {
+    public Os(final String os) {
         this();
-        this.setContent(version);
+        this.setContent(os);
     }
 }

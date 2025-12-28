@@ -28,6 +28,7 @@ import im.conversations.android.xmpp.Entity;
 import im.conversations.android.xmpp.EntityCapabilities;
 import im.conversations.android.xmpp.EntityCapabilities2;
 import im.conversations.android.xmpp.ServiceDescription;
+import im.conversations.android.xmpp.StreamElementWriter;
 import im.conversations.android.xmpp.model.Hash;
 import im.conversations.android.xmpp.model.disco.info.InfoQuery;
 import im.conversations.android.xmpp.model.disco.items.Item;
@@ -35,7 +36,7 @@ import im.conversations.android.xmpp.model.disco.items.ItemsQuery;
 import im.conversations.android.xmpp.model.error.Condition;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import im.conversations.android.xmpp.model.stanza.Presence;
-import im.conversations.android.xmpp.model.version.Version;
+import im.conversations.android.xmpp.model.version.Query;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -381,7 +382,7 @@ public class DiscoManager extends AbstractManager {
     }
 
     public void handleVersionRequest(final Iq request) {
-        final var version = new Version();
+        final var version = new Query();
         version.setSoftwareName(context.getString(R.string.app_name));
         version.setVersion(getIdentityVersion());
         if ("chromium".equals(android.os.Build.BRAND)) {

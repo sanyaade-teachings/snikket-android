@@ -28,7 +28,6 @@ import im.conversations.android.xmpp.Entity;
 import im.conversations.android.xmpp.EntityCapabilities;
 import im.conversations.android.xmpp.EntityCapabilities2;
 import im.conversations.android.xmpp.ServiceDescription;
-import im.conversations.android.xmpp.StreamElementWriter;
 import im.conversations.android.xmpp.model.Hash;
 import im.conversations.android.xmpp.model.disco.info.InfoQuery;
 import im.conversations.android.xmpp.model.disco.items.Item;

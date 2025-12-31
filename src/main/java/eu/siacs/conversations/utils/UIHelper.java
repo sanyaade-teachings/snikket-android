@@ -296,7 +296,7 @@ public class UIHelper {
         final var styledBody = new SpannableStringBuilder(body);
         StylingHelper.format(styledBody, 0, styledBody.length() - 1, textColor);
         final var builder = new SpannableStringBuilder();
-        for (final var l : CharSequenceUtils.split(styledBody, '\n')) {
+        for (final var l : CharSequences.split(styledBody, '\n')) {
             if (l.length() == 0) {
                 continue;
             }
@@ -306,7 +306,7 @@ public class UIHelper {
             if (QuoteHelper.isPositionQuoteCharacter(l, 0)) {
                 continue;
             }
-            final var trimmed = CharSequenceUtils.trim(l);
+            final var trimmed = CharSequences.trim(l);
             if (trimmed.length() == 0) {
                 continue;
             }

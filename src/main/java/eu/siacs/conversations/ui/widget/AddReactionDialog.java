@@ -23,7 +23,7 @@ import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.Reaction;
 import eu.siacs.conversations.ui.AddReactionActivity;
-import eu.siacs.conversations.utils.CharSequenceUtils;
+import eu.siacs.conversations.utils.CharSequences;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import im.conversations.android.xmpp.model.reactions.Restrictions;
 import java.util.Collection;
@@ -122,16 +122,16 @@ public class AddReactionDialog {
 
         private final DialogAddReactionBinding viewBinding;
 
-        private EmojiTextWatcher(DialogAddReactionBinding viewBinding) {
+        private EmojiTextWatcher(final DialogAddReactionBinding viewBinding) {
             this.viewBinding = viewBinding;
         }
 
         @Override
-        public void afterTextChanged(Editable s) {
+        public void afterTextChanged(final Editable s) {
             if (this.viewBinding.emojiInputLayout.getVisibility() != View.VISIBLE) {
                 return;
             }
-            if (s.isEmpty()) {
+            if (CharSequences.isEmpty(s)) {
                 this.viewBinding.keyboard.setIconResource(R.drawable.ic_close_24dp);
             } else {
                 this.viewBinding.keyboard.setIconResource(R.drawable.ic_send_24dp);
@@ -179,7 +179,7 @@ public class AddReactionDialog {
         }
 
         protected void submitTextInputEmoji(final Editable text) {
-            final var emojis = EmojiManager.extractEmojis(CharSequenceUtils.nullToEmpty(text));
+            final var emojis = EmojiManager.extractEmojis(CharSequences.nullToEmpty(text));
             final var aggregated = message.getAggregatedReactions();
             final ImmutableSet.Builder<String> reactionBuilder = new ImmutableSet.Builder<>();
             reactionBuilder.addAll(aggregated.ourReactions);
@@ -230,14 +230,14 @@ public class AddReactionDialog {
                 viewBinding.emojis.setVisibility(View.GONE);
                 viewBinding.emojiInputLayout.setVisibility(View.VISIBLE);
                 viewBinding.emojiTextInput.post(viewBinding.emojiTextInput::requestFocus);
-                if (viewBinding.emojiTextInput.getEditableText().isEmpty()) {
+                if (CharSequences.isEmpty(viewBinding.emojiTextInput.getEditableText())) {
                     this.viewBinding.keyboard.setIconResource(R.drawable.ic_close_24dp);
                 } else {
                     this.viewBinding.keyboard.setIconResource(R.drawable.ic_send_24dp);
                 }
             } else {
                 final var text = viewBinding.emojiTextInput.getText();
-                if (text == null || text.isEmpty()) {
+                if (CharSequences.isEmpty(text)) {
                     viewBinding.emojis.setVisibility(View.VISIBLE);
                     viewBinding.emojiInputLayout.setVisibility(View.GONE);
                     viewBinding.keyboard.setIconResource(R.drawable.ic_keyboard_24dp);

@@ -117,7 +117,7 @@ import eu.siacs.conversations.ui.util.ShareUtil;
 import eu.siacs.conversations.ui.util.ViewUtil;
 import eu.siacs.conversations.ui.widget.EditMessage;
 import eu.siacs.conversations.utils.AccountUtils;
-import eu.siacs.conversations.utils.CharSequenceUtils;
+import eu.siacs.conversations.utils.CharSequences;
 import eu.siacs.conversations.utils.Compatibility;
 import eu.siacs.conversations.utils.GeoHelper;
 import eu.siacs.conversations.utils.MessageUtils;
@@ -2402,7 +2402,7 @@ public class ConversationFragment extends XmppFragment
     private void correctMessage(final Message message) {
         this.conversation.setCorrectingMessage(message);
         final Editable editable = binding.textinput.getText();
-        this.conversation.setDraftMessage(CharSequenceUtils.nullToEmpty(editable));
+        this.conversation.setDraftMessage(CharSequences.nullToEmpty(editable));
         this.binding.textinput.setText("");
         this.binding.textinput.append(message.getBody());
         updateChatMsgHint();
@@ -2413,7 +2413,7 @@ public class ConversationFragment extends XmppFragment
         if (editable == null) {
             return;
         }
-        final var oldString = CharSequenceUtils.nullToEmpty(editable).trim();
+        final var oldString = CharSequences.nullToEmpty(editable).trim();
         final int pos = this.binding.textinput.getSelectionStart();
         if (oldString.isEmpty() || pos == 0) {
             editable.insert(0, nick + ": ");
@@ -3042,7 +3042,7 @@ public class ConversationFragment extends XmppFragment
         final Conversation c = this.conversation;
         final var connection = c.getAccount().getXmppConnection();
         final Presence.Availability status;
-        final String text = CharSequenceUtils.nullToEmpty(this.binding.textinput.getText());
+        final String text = CharSequences.nullToEmpty(this.binding.textinput.getText());
         final SendButtonAction action;
         if (hasAttachments) {
             action = SendButtonAction.TEXT;

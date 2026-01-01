@@ -171,7 +171,22 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                         file.getName(),
                         message.getMimeType(),
                         Collections.emptyList());
-        final var transportInfoFuture = this.transport.asInitialTransportInfo();
+        final var transportInfoFutureRaw = this.transport.asInitialTransportInfo();
+        final var transportInfoFuture =
+                Futures.catchingAsync(
+                        transportInfoFutureRaw,
+                        WebRTCDataChannelTransport.InitiatorNoRelaysException.class,
+                        ex -> {
+                            Log.d(
+                                    Config.LOGTAG,
+                                    "fallback to last resort transport as initiator",
+                                    ex);
+                            final var transport = setupLastResortTransport();
+                            this.transport = transport;
+                            this.transport.setTransportCallback(this);
+                            return transport.asInitialTransportInfo();
+                        },
+                        MoreExecutors.directExecutor());
         Futures.addCallback(
                 transportInfoFuture,
                 new FutureCallback<>() {

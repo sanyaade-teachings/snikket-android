@@ -220,12 +220,10 @@ public class WebRTCDataChannelTransport implements Transport {
                         .createInitializationOptions());
         this.peerConnectionFactory = PeerConnectionFactory.builder().createPeerConnectionFactory();
         this.xmppConnection = xmppConnection;
-        final var appSettings = new AppSettings(context);
         this.peerConnectionFuture =
                 Futures.transform(
                         getIceServers(),
-                        iceServers ->
-                                createPeerConnection(iceServers, true, appSettings.isUseRelays()),
+                        iceServers -> createPeerConnectionOrThrow(context, iceServers, initiator),
                         MoreExecutors.directExecutor());
         if (initiator) {
             this.localDescriptionFuture = setLocalDescription();
@@ -241,6 +239,21 @@ public class WebRTCDataChannelTransport implements Transport {
                     return Collections.emptySet();
                 },
                 MoreExecutors.directExecutor());
+    }
+
+    private PeerConnection createPeerConnectionOrThrow(
+            final Context context,
+            final Collection<PeerConnection.IceServer> iceServers,
+            final boolean initiator) {
+        final var appSettings = new AppSettings(context);
+        final var isUseRelays = appSettings.isUseRelays();
+        if (isUseRelays && initiator) {
+            if (iceServers == null
+                    || !Iterables.any(iceServers, i -> i != null && WebRTCWrapper.isTurnRelay(i))) {
+                throw new InitiatorNoRelaysException("Initiator had no TURN relays");
+            }
+        }
+        return createPeerConnection(iceServers, true, isUseRelays);
     }
 
     private PeerConnection createPeerConnection(
@@ -534,6 +547,13 @@ public class WebRTCDataChannelTransport implements Transport {
                     return future;
                 },
                 MoreExecutors.directExecutor());
+    }
+
+    public static class InitiatorNoRelaysException extends IllegalStateException {
+
+        private InitiatorNoRelaysException(final String message) {
+            super(message);
+        }
     }
 
     private static class DataChannelWriter implements Runnable {

@@ -345,9 +345,7 @@ public class DiscoManager extends AbstractManager {
         if (appSettings.isAllowMessageCorrection()) {
             features.addAll(MESSAGE_CORRECTION_FEATURES);
         }
-        if (Config.supportOmemo()) {
-            features.add(AxolotlService.PEP_DEVICE_LIST_NOTIFY);
-        }
+        features.add(AxolotlService.PEP_DEVICE_LIST_NOTIFY);
         if (!appSettings.isUseTor() && !account.isOnion()) {
             features.addAll(PRIVACY_SENSITIVE);
             features.addAll(VOIP_NAMESPACES);

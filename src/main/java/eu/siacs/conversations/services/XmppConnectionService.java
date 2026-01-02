@@ -323,9 +323,7 @@ public class XmppConnectionService extends Service {
     }
 
     public PgpEngine getPgpEngine() {
-        if (!Config.supportOpenPgp()) {
-            return null;
-        } else if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
+        if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
             if (this.mPgpEngine == null) {
                 this.mPgpEngine =
                         new PgpEngine(
@@ -340,9 +338,7 @@ public class XmppConnectionService extends Service {
     }
 
     public OpenPgpApi getOpenPgpApi() {
-        if (!Config.supportOpenPgp()) {
-            return null;
-        } else if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
+        if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
             return new OpenPgpApi(this, pgpServiceConnection.getService());
         } else {
             return null;
@@ -1150,33 +1146,28 @@ public class XmppConnectionService extends Service {
             FILE_OBSERVER_EXECUTOR.execute(this.fileObserver::startWatching);
             FILE_OBSERVER_EXECUTOR.execute(this::checkForDeletedFiles);
         }
-        if (Config.supportOpenPgp()) {
-            this.pgpServiceConnection =
-                    new OpenPgpServiceConnection(
-                            this,
-                            "org.sufficientlysecure.keychain",
-                            new OpenPgpServiceConnection.OnBound() {
-                                @Override
-                                public void onBound(final IOpenPgpService2 service) {
-                                    for (Account account : accounts) {
-                                        final PgpDecryptionService pgp =
-                                                account.getPgpDecryptionService();
-                                        if (pgp != null) {
-                                            pgp.continueDecryption(true);
-                                        }
+        this.pgpServiceConnection =
+                new OpenPgpServiceConnection(
+                        this,
+                        "org.sufficientlysecure.keychain",
+                        new OpenPgpServiceConnection.OnBound() {
+                            @Override
+                            public void onBound(final IOpenPgpService2 service) {
+                                for (Account account : accounts) {
+                                    final PgpDecryptionService pgp =
+                                            account.getPgpDecryptionService();
+                                    if (pgp != null) {
+                                        pgp.continueDecryption(true);
                                     }
                                 }
+                            }
 
-                                @Override
-                                public void onError(final Exception exception) {
-                                    Log.e(
-                                            Config.LOGTAG,
-                                            "could not bind to OpenKeyChain",
-                                            exception);
-                                }
-                            });
-            this.pgpServiceConnection.bindToService();
-        }
+                            @Override
+                            public void onError(final Exception exception) {
+                                Log.e(Config.LOGTAG, "could not bind to OpenKeyChain", exception);
+                            }
+                        });
+        this.pgpServiceConnection.bindToService();
 
         final PowerManager powerManager = getSystemService(PowerManager.class);
         if (powerManager != null) {

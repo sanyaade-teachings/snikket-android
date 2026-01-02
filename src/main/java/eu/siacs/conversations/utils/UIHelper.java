@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
-import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.entities.Account;
@@ -512,13 +511,7 @@ public class UIHelper {
 
     public static String getMessageHint(final Context context, final Conversation conversation) {
         return switch (conversation.getNextEncryption()) {
-            case Message.ENCRYPTION_NONE -> {
-                if (Config.multipleEncryptionChoices()) {
-                    yield context.getString(R.string.send_unencrypted_message);
-                } else {
-                    yield context.getString(R.string.send_message_to_x, conversation.getName());
-                }
-            }
+            case Message.ENCRYPTION_NONE -> context.getString(R.string.send_unencrypted_message);
             case Message.ENCRYPTION_AXOLOTL -> {
                 final AxolotlService axolotlService = conversation.getAccount().getAxolotlService();
                 if (axolotlService != null && axolotlService.trustedSessionVerified(conversation)) {

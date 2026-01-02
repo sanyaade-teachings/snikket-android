@@ -446,9 +446,9 @@ public class MessageParser extends AbstractParser
                 }
             }
             final Message message;
-            if (pgpEncrypted != null && Config.supportOpenPgp()) {
+            if (pgpEncrypted != null) {
                 message = new Message(conversation, pgpEncrypted, Message.ENCRYPTION_PGP, status);
-            } else if (axolotlEncrypted != null && Config.supportOmemo()) {
+            } else if (axolotlEncrypted != null) {
                 final Jid origin;
                 if (conversationMultiMode) {
                     final var user =

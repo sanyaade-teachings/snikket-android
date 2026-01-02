@@ -1,6 +1,5 @@
 package eu.siacs.conversations.generator;
 
-import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.crypto.axolotl.XmppAxolotlMessage;
 import eu.siacs.conversations.entities.Account;
@@ -112,9 +111,7 @@ public class MessageGenerator extends AbstractGenerator {
             packet.setBody(url);
             packet.addChild("x", Namespace.OOB).addChild("url").setContent(url);
         } else {
-            if (Config.supportUnencrypted()) {
-                packet.setBody(PGP_FALLBACK_MESSAGE);
-            }
+            packet.setBody(PGP_FALLBACK_MESSAGE);
             if (message.getEncryption() == Message.ENCRYPTION_DECRYPTED) {
                 packet.addChild("x", "jabber:x:encrypted").setContent(message.getEncryptedBody());
             } else if (message.getEncryption() == Message.ENCRYPTION_PGP) {

@@ -85,13 +85,15 @@ The default configurations are usually fine but you might want to use the [Conve
 |Encrypted A/V Calls|✅|✅|
 |Multiple Accounts|✅|✅|
 |Persistent connection to XMPP server via *Foreground Service*|✅|✅|
-|Address book integration|🚫|✅|
-|Public channel search¹|🚫|✅|
-|FCM notifications as fallback for rare, but aggressive battery saving on some ROMs|✅|🚫|
+|Address book integration|⛔|✅|
+|Public channel search¹|⛔|✅|
+|Fallback via FCM (Google Push)²|✅|⛔|
 |Price|💰|🎁|
 
 
 ¹: Can be substituted via [search.jabber.network](https://search.jabber.network)
+
+²: Firebase Cloud Messaging (FCM) notifications are only issued by the XMPP server if the persisent connection via Foreground Service fails. This is very rare and only happens due to aggressive power saving by some Android vendors and/or after long periods of not using the app. Notifications send through Google are wake up signals only and never contain any content.
 
 If you know what F-Droid is and have it installed for other apps as well, you are most likely better off with the F-Droid version.
 

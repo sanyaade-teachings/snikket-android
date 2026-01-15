@@ -76,7 +76,6 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.MucOptions;
 import eu.siacs.conversations.entities.PresenceTemplate;
 import eu.siacs.conversations.entities.Presences;
-import eu.siacs.conversations.entities.Reaction;
 import eu.siacs.conversations.generator.AbstractGenerator;
 import eu.siacs.conversations.generator.IqGenerator;
 import eu.siacs.conversations.generator.MessageGenerator;
@@ -96,7 +95,6 @@ import eu.siacs.conversations.utils.AccountUtils;
 import eu.siacs.conversations.utils.Compatibility;
 import eu.siacs.conversations.utils.ConversationsFileObserver;
 import eu.siacs.conversations.utils.CryptoHelper;
-import eu.siacs.conversations.utils.Emoticons;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.PhoneHelper;
 import eu.siacs.conversations.utils.QuickLoader;
@@ -116,7 +114,7 @@ import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.forms.Data;
 import eu.siacs.conversations.xmpp.jingle.AbstractJingleConnection;
-import eu.siacs.conversations.xmpp.jingle.JingleConnectionManager;
+import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
 import eu.siacs.conversations.xmpp.jingle.Media;
 import eu.siacs.conversations.xmpp.jingle.RtpEndUserState;
 import eu.siacs.conversations.xmpp.mam.MamReference;
@@ -126,6 +124,7 @@ import eu.siacs.conversations.xmpp.manager.BlockingManager;
 import eu.siacs.conversations.xmpp.manager.BookmarkManager;
 import eu.siacs.conversations.xmpp.manager.ChatStateManager;
 import eu.siacs.conversations.xmpp.manager.DisplayedManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.NickManager;
@@ -134,9 +133,9 @@ import eu.siacs.conversations.xmpp.manager.PresenceManager;
 import eu.siacs.conversations.xmpp.manager.RegistrationManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
 import eu.siacs.conversations.xmpp.manager.VCardManager;
-import eu.siacs.conversations.xmpp.pep.Avatar;
 import im.conversations.android.model.Bookmark;
 import im.conversations.android.model.ImmutableBookmark;
+import im.conversations.android.xmpp.model.delay.Delay;
 import im.conversations.android.xmpp.model.muc.Affiliation;
 import im.conversations.android.xmpp.model.muc.Role;
 import im.conversations.android.xmpp.model.stanza.Iq;
@@ -144,6 +143,7 @@ import im.conversations.android.xmpp.model.up.Push;
 import java.io.File;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -251,8 +251,6 @@ public class XmppConnectionService extends Service {
                 }
             };
     private List<Account> accounts;
-    private final JingleConnectionManager mJingleConnectionManager =
-            new JingleConnectionManager(this);
     private final HttpConnectionManager mHttpConnectionManager = new HttpConnectionManager(this);
     private final AvatarService mAvatarService = new AvatarService(this);
     private final QuickConversationsService mQuickConversationsService =
@@ -304,10 +302,6 @@ public class XmppConnectionService extends Service {
             new RestrictedEventReceiver(List.of(TorServiceUtils.ACTION_STATUS));
     private final BroadcastReceiver mInternalScreenEventReceiver = new InternalEventReceiver();
 
-    private static String generateFetchKey(Account account, final Avatar avatar) {
-        return account.getJid().asBareJid() + "_" + avatar.owner + "_" + avatar.sha1sum;
-    }
-
     public boolean isInLowPingTimeoutMode(Account account) {
         synchronized (mLowPingTimeoutMode) {
             return mLowPingTimeoutMode.contains(account.getJid().asBareJid());
@@ -329,9 +323,7 @@ public class XmppConnectionService extends Service {
     }
 
     public PgpEngine getPgpEngine() {
-        if (!Config.supportOpenPgp()) {
-            return null;
-        } else if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
+        if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
             if (this.mPgpEngine == null) {
                 this.mPgpEngine =
                         new PgpEngine(
@@ -346,9 +338,7 @@ public class XmppConnectionService extends Service {
     }
 
     public OpenPgpApi getOpenPgpApi() {
-        if (!Config.supportOpenPgp()) {
-            return null;
-        } else if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
+        if (pgpServiceConnection != null && pgpServiceConnection.isBound()) {
             return new OpenPgpApi(this, pgpServiceConnection.getService());
         } else {
             return null;
@@ -535,15 +525,11 @@ public class XmppConnectionService extends Service {
                 break;
             case ACTION_DISMISS_CALL:
                 {
-                    if (intent == null) {
-                        break;
-                    }
                     final String sessionId =
-                            intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
-                    Log.d(
-                            Config.LOGTAG,
-                            "received intent to dismiss call with session id " + sessionId);
-                    mJingleConnectionManager.rejectRtpSession(sessionId);
+                            intent == null
+                                    ? null
+                                    : intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
+                    rejectRtpSession(sessionId);
                     break;
                 }
             case TorServiceUtils.ACTION_STATUS:
@@ -557,15 +543,11 @@ public class XmppConnectionService extends Service {
                 break;
             case ACTION_END_CALL:
                 {
-                    if (intent == null) {
-                        break;
-                    }
                     final String sessionId =
-                            intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
-                    Log.d(
-                            Config.LOGTAG,
-                            "received intent to end call with session id " + sessionId);
-                    mJingleConnectionManager.endRtpSession(sessionId);
+                            intent == null
+                                    ? null
+                                    : intent.getStringExtra(RtpSessionActivity.EXTRA_SESSION_ID);
+                    endRtpSession(sessionId);
                 }
                 break;
             case ACTION_PROVISION_ACCOUNT:
@@ -736,6 +718,33 @@ public class XmppConnectionService extends Service {
         return START_STICKY;
     }
 
+    private void rejectRtpSession(final String sessionId) {
+        Log.d(Config.LOGTAG, "received intent to dismiss call with session id " + sessionId);
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            jingleManager.rejectRtpSession(sessionId);
+        }
+    }
+
+    public JingleRtpConnection getOngoingRtpConnection() {
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            final var ongoing = jingleManager.getOngoingRtpConnection();
+            if (ongoing != null) {
+                return ongoing;
+            }
+        }
+        return null;
+    }
+
+    private void endRtpSession(final String sessionId) {
+        Log.d(Config.LOGTAG, "received intent to end call with session id " + sessionId);
+        for (final var account : this.accounts) {
+            final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
+            jingleManager.endRtpSession(sessionId);
+        }
+    }
+
     private void quickLog(final String message) {
         if (Strings.isNullOrEmpty(message)) {
             return;
@@ -891,7 +900,9 @@ public class XmppConnectionService extends Service {
             } else {
                 final boolean aggressive =
                         account.getStatus() == Account.State.SEE_OTHER_HOST
-                                || hasJingleRtpConnection(account);
+                                || connection
+                                        .getManager(JingleManager.class)
+                                        .hasJingleRtpConnection();
                 if (connection.getTimeToNextAttempt(aggressive) <= 0) {
                     reconnectAccount(account, true, interactive);
                 }
@@ -1135,33 +1146,28 @@ public class XmppConnectionService extends Service {
             FILE_OBSERVER_EXECUTOR.execute(this.fileObserver::startWatching);
             FILE_OBSERVER_EXECUTOR.execute(this::checkForDeletedFiles);
         }
-        if (Config.supportOpenPgp()) {
-            this.pgpServiceConnection =
-                    new OpenPgpServiceConnection(
-                            this,
-                            "org.sufficientlysecure.keychain",
-                            new OpenPgpServiceConnection.OnBound() {
-                                @Override
-                                public void onBound(final IOpenPgpService2 service) {
-                                    for (Account account : accounts) {
-                                        final PgpDecryptionService pgp =
-                                                account.getPgpDecryptionService();
-                                        if (pgp != null) {
-                                            pgp.continueDecryption(true);
-                                        }
+        this.pgpServiceConnection =
+                new OpenPgpServiceConnection(
+                        this,
+                        "org.sufficientlysecure.keychain",
+                        new OpenPgpServiceConnection.OnBound() {
+                            @Override
+                            public void onBound(final IOpenPgpService2 service) {
+                                for (Account account : accounts) {
+                                    final PgpDecryptionService pgp =
+                                            account.getPgpDecryptionService();
+                                    if (pgp != null) {
+                                        pgp.continueDecryption(true);
                                     }
                                 }
+                            }
 
-                                @Override
-                                public void onError(final Exception exception) {
-                                    Log.e(
-                                            Config.LOGTAG,
-                                            "could not bind to OpenKeyChain",
-                                            exception);
-                                }
-                            });
-            this.pgpServiceConnection.bindToService();
-        }
+                            @Override
+                            public void onError(final Exception exception) {
+                                Log.e(Config.LOGTAG, "could not bind to OpenKeyChain", exception);
+                            }
+                        });
+        this.pgpServiceConnection.bindToService();
 
         final PowerManager powerManager = getSystemService(PowerManager.class);
         if (powerManager != null) {
@@ -1520,7 +1526,9 @@ public class XmppConnectionService extends Service {
                 && !forceP2P) {
             mHttpConnectionManager.createNewUploadConnection(message, delay);
         } else {
-            mJingleConnectionManager.startJingleFileTransfer(message);
+            account.getXmppConnection()
+                    .getManager(JingleManager.class)
+                    .startJingleFileTransfer(message);
         }
     }
 
@@ -1705,7 +1713,7 @@ public class XmppConnectionService extends Service {
         }
         if (packet != null) {
             if (delay) {
-                mMessageGenerator.addDelay(packet, message.getTimeSent());
+                packet.addExtension(new Delay(Instant.ofEpochMilli(message.getTimeSent())));
             }
             final var chatStateManager =
                     account.getXmppConnection().getManager(ChatStateManager.class);
@@ -3612,80 +3620,6 @@ public class XmppConnectionService extends Service {
         connection.getManager(DisplayedManager.class).displayed(readMessages);
     }
 
-    public boolean sendReactions(final Message message, final Collection<String> reactions) {
-        if (message.getConversation() instanceof Conversation conversation) {
-            final var isPrivateMessage = message.isPrivateMessage();
-            final Jid reactTo;
-            final boolean typeGroupChat;
-            final String reactToId;
-            final Collection<Reaction> combinedReactions;
-            if (conversation.getMode() == Conversational.MODE_MULTI && !isPrivateMessage) {
-                final var mucOptions = conversation.getMucOptions();
-                if (!mucOptions.participating()) {
-                    Log.e(Config.LOGTAG, "not participating in MUC");
-                    return false;
-                }
-                final var self = mucOptions.getSelf();
-                final String occupantId = self.getOccupantId();
-                if (Strings.isNullOrEmpty(occupantId)) {
-                    Log.e(Config.LOGTAG, "occupant id not found for reaction in MUC");
-                    return false;
-                }
-                final var existingRaw =
-                        ImmutableSet.copyOf(
-                                Collections2.transform(message.getReactions(), r -> r.reaction));
-                final var reactionsAsExistingVariants =
-                        ImmutableSet.copyOf(
-                                Collections2.transform(
-                                        reactions, r -> Emoticons.existingVariant(r, existingRaw)));
-                if (!reactions.equals(reactionsAsExistingVariants)) {
-                    Log.d(Config.LOGTAG, "modified reactions to existing variants");
-                }
-                reactToId = message.getServerMsgId();
-                reactTo = conversation.getAddress().asBareJid();
-                typeGroupChat = true;
-                combinedReactions =
-                        Reaction.withOccupantId(
-                                message.getReactions(),
-                                reactionsAsExistingVariants,
-                                false,
-                                self.getFullJid(),
-                                conversation.getAccount().getJid(),
-                                occupantId);
-            } else {
-                if (message.isCarbon() || message.getStatus() == Message.STATUS_RECEIVED) {
-                    reactToId = message.getRemoteMsgId();
-                } else {
-                    reactToId = message.getUuid();
-                }
-                typeGroupChat = false;
-                if (isPrivateMessage) {
-                    reactTo = message.getCounterpart();
-                } else {
-                    reactTo = conversation.getAddress().asBareJid();
-                }
-                combinedReactions =
-                        Reaction.withFrom(
-                                message.getReactions(),
-                                reactions,
-                                false,
-                                conversation.getAccount().getJid());
-            }
-            if (reactTo == null || Strings.isNullOrEmpty(reactToId)) {
-                Log.e(Config.LOGTAG, "could not find id to react to");
-                return false;
-            }
-            final var reactionMessage =
-                    mMessageGenerator.reaction(reactTo, typeGroupChat, reactToId, reactions);
-            sendMessagePacket(conversation.getAccount(), reactionMessage);
-            message.setReactions(combinedReactions);
-            updateMessage(message, false);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     public MemorizingTrustManager getMemorizingTrustManager() {
         return this.mMemorizingTrustManager;
     }
@@ -3802,14 +3736,6 @@ public class XmppConnectionService extends Service {
 
     public IqGenerator getIqGenerator() {
         return this.mIqGenerator;
-    }
-
-    public JingleConnectionManager getJingleConnectionManager() {
-        return this.mJingleConnectionManager;
-    }
-
-    public boolean hasJingleRtpConnection(final Account account) {
-        return this.mJingleConnectionManager.hasJingleRtpConnection(account);
     }
 
     public QuickConversationsService getQuickConversationsService() {

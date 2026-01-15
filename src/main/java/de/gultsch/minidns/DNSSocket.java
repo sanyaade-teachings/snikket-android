@@ -3,6 +3,7 @@ package de.gultsch.minidns;
 import android.util.Log;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -75,11 +76,16 @@ final class DNSSocket implements Closeable {
     }
 
     private void evictInFlightQueries(final Exception e) {
+        final ImmutableList<SettableFuture<DnsMessage>> futures;
         synchronized (inFlightQueries) {
-            for (var future : this.inFlightQueries.values()) {
-                future.setException(e);
+            if (this.inFlightQueries.isEmpty()) {
+                return;
             }
+            futures = ImmutableList.copyOf(this.inFlightQueries.values());
             this.inFlightQueries.clear();
+        }
+        for (var future : futures) {
+            future.setException(e);
         }
     }
 

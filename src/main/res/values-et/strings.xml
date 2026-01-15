@@ -131,7 +131,7 @@
     <string name="pref_send_crash_reports">Saada krahhiaruandeid</string>
     <string name="pref_never_send_crash_summary">Saates rakenduse kokkujooksmise korral arendajatele teavet, aitad sa vigu parandada ja rakendust edasi arendada</string>
     <string name="pref_confirm_messages">Lugemisteatised</string>
-    <string name="pref_confirm_messages_summary">Luba oma kontaktidel teada saada, kui oled saanud ja lugenud nende sõnumeid</string>
+    <string name="pref_confirm_messages_summary">Kui eelistus on kasutusel, siis sinu kontaktid saavad teada, kui oled lugenud nende sõnumeid.</string>
     <string name="pref_prevent_screenshots">Keela ekraanitõmmised</string>
     <string name="pref_prevent_screenshots_summary">Peida rakenduste vahetajast selle rakenduse sisu ja blokeeri ekraanitõmmiste tegemine</string>
     <string name="pref_ui_options">Kasutajaliides</string>
@@ -716,7 +716,7 @@
     <string name="selection_too_large">Valitud ala on liiga suur</string>
     <string name="no_accounts">(Aktiveeritud kasutajakontosid pole)</string>
     <string name="this_field_is_required">Selle välja täitmine on kohustuslik</string>
-    <string name="correct_message">Muuda sõnumit</string>
+    <string name="correct_message">Muuda</string>
     <string name="send_corrected_message">Saada muudetud sõnum</string>
     <string name="device_does_not_support_battery_op">Sinu nutiseade et toeta akukasutuse optimeerimise rakendusekohast väljalülitamist</string>
     <string name="agree_and_continue">Nõustu ja jätka</string>
@@ -1170,4 +1170,7 @@
     <string name="peer_to_peer">Võrdõigusvõrk (P2P)</string>
     <string name="pref_use_relays">Kasuta alati edastusservereid</string>
     <string name="pref_use_relays_summary">Vältimaks sinu IP-aadressi avaldamist kasuta võrdõigusvõrgu ühenduste (kõned ja failiedastus) puhul oma serverit vaheapealse edastusserverina.</string>
+    <string name="mobile_ticket">Nutipääsmik</string>
+    <string name="open_keyboard">Ava klahvistik</string>
+    <string name="emoji_reactions">Emojiga reageerimine</string>
 </resources>

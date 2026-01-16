@@ -847,12 +847,12 @@ public class MessageAdapter extends ArrayAdapter<Message> {
         final BubbleColor bubbleColor;
         if (received) {
             if (isInValidSession) {
-                bubbleColor = BubbleColor.SURFACE_HIGH;
+                bubbleColor = colorfulBackground ? BubbleColor.SURFACE_HIGH : BubbleColor.PRIMARY;
             } else {
                 bubbleColor = BubbleColor.WARNING;
             }
         } else {
-            bubbleColor = BubbleColor.PRIMARY;
+            bubbleColor = colorfulBackground ? BubbleColor.PRIMARY : BubbleColor.SURFACE_HIGH;
         }
 
         final var mergeIntoTop = mergeIntoTop(position, message);

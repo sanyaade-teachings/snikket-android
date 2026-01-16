@@ -337,7 +337,7 @@ public class Resolver {
 
         static List<Result> createWithDefaultPorts(final DnsName hostname, final InetAddress ip) {
             return Lists.transform(
-                    Arrays.asList(XMPP_PORT_STARTTLS, XMPP_PORT_DIRECT_TLS),
+                    Arrays.asList(XMPP_PORT_STARTTLS),
                     p -> createDefault(hostname, ip, p));
         }
 

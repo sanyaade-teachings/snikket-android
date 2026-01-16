@@ -293,7 +293,10 @@ public class MessageAdapter extends ArrayAdapter<Message> {
                 timeInfoBuilder.add(displayName);
             }
         }
-        if (fileSize != null) {
+        // Disable file size display in Snikket
+        // Most other messaging apps don't display this so prominently, it's
+        // not of immense value to the user once the file is visible
+        if (false && fileSize != null) {
             timeInfoBuilder.add(fileSize);
         }
         if (bodyLanguage != null) {

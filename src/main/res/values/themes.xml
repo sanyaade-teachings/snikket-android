@@ -125,7 +125,13 @@
         <item name="android:letterSpacing">0</item>
     </style>
 
-   <style name="ShapeAppearance.RoundedCornersMedium" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+    <style name="ShapeAppearance.RoundedCornersHeavy" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <!-- 16dp matches drawable/background_message_bubble corner radius -->
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <style name="ShapeAppearance.RoundedCornersMedium" parent="ShapeAppearance.MaterialComponents.SmallComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">8dp</item>
     </style>
@@ -144,5 +150,4 @@
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">50%</item>
     </style>
-
 </resources>

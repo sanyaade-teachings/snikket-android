@@ -23,14 +23,15 @@
             android:layout_gravity="center_horizontal"
             android:orientation="horizontal">
 
-            <ImageView
+            <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/message_image"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:adjustViewBounds="true"
                 android:background="@color/gray_800"
                 android:longClickable="true"
-                android:scaleType="centerCrop" />
+                android:scaleType="centerCrop"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.RoundedCornersHeavy" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton

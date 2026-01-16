@@ -134,7 +134,8 @@ android {
     }
 
     configurations {
-        implementation.exclude group: 'org.jetbrains' , module:'annotations'
+        // Snikket: commented because it makes builds fail
+        // implementation.exclude group: 'org.jetbrains' , module:'annotations'
     }
 
     dataBinding {

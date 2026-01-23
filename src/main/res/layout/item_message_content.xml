@@ -31,7 +31,7 @@
                 android:background="@color/gray_800"
                 android:longClickable="true"
                 android:scaleType="centerCrop"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.RoundedCornersHeavy" />
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.RoundedCornersInsideBubble" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
